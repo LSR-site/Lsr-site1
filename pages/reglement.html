@@ -1,0 +1,53 @@
+    <main class="code-page">
+      <aside class="code-spine" aria-hidden="true"><span>Code officiel · Los Santos Reborn</span></aside>
+      <div class="code-main">
+        <header class="code-cover">
+          <div class="code-cover-copy">
+            <p class="breadcrumb" id="rulesBreadcrumb"><a href="/">Accueil</a><span>/</span>Règlement</p>
+            <p data-edit="reglement.dossier" class="code-eid">Dossier LSR-01 · Version du site</p>
+            <h1 id="rulesTitle"><em>Le code</em> Los Santos Reborn</h1>
+            <p data-edit="reglement.intro" class="code-cover-lead" id="rulesLead">
+              Choisis un thème en photo. Le détail s’ouvre ensuite, article par article.
+            </p>
+            <div class="code-cover-meta">
+              <span>Statut <strong>En vigueur</strong></span>
+              <span id="rulesMeta">Lecture publique</span>
+              <div class="code-actions" id="rulesActions"></div>
+            </div>
+          </div>
+          <svg class="code-seal" viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" stroke-width="1.2" />
+            <circle cx="60" cy="60" r="46" fill="none" stroke="currentColor" stroke-width="0.6" />
+            <path id="codeSealPath" d="M60,60 m-34,0 a34,34 0 1,1 68,0 a34,34 0 1,1 -68,0" fill="none" />
+            <text>
+              <textPath href="#codeSealPath">LOS SANTOS REBORN · CODE OFFICIEL · EN VIGUEUR ·</textPath>
+            </text>
+            <text class="code-seal-mark" x="60" y="66" text-anchor="middle">LS</text>
+          </svg>
+        </header>
+
+        <p class="code-status" id="saveStatus"></p>
+
+        <div id="rulesHub" class="rules-hub"></div>
+
+        <div class="code-layout is-theme" id="rulesDetail" hidden>
+          <nav class="code-chapters" id="rulesFilters" hidden></nav>
+          <section class="code-folio">
+            <div class="code-folio-watermark">LOS SANTOS</div>
+            <div class="code-folio-head">
+              <button class="rules-back" type="button" data-back-hub>← Tous les thèmes</button>
+              <strong id="chapterLead">Thème</strong>
+              <span>Articles en vigueur</span>
+            </div>
+            <div id="rulesView" class="code-articles"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <p data-edit="reglement.pied">Le code peut évoluer. La version du site fait foi.</p>
+        <a href="https://discord.gg/bNDKVDSaz" target="_blank" rel="noreferrer">Discord Los Santos Reborn</a>
+      </div>
+    </footer>

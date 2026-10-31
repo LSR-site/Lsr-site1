@@ -1,0 +1,47 @@
+    <main>
+      <section class="home-hero wrap">
+        <div class="home-intro">
+          <p data-edit="accueil.surtitre" class="kicker">Serveur roleplay</p>
+          <h1 data-edit="accueil.titre">Los Santos Reborn</h1>
+          <p data-edit="accueil.intro" class="lead">Ville, véhicules, staff — le serveur se montre ici. Rejoins-nous en jeu et sur Discord.</p>
+          <div class="hero-actions">
+            <a data-edit="accueil.bouton-wl" class="btn btn-gold" href="/whitelist">Demande de WL</a>
+            <a data-edit="accueil.bouton-tickets" class="btn btn-ghost" href="/tickets">Tickets</a>
+            <a data-edit="accueil.bouton-equipe" class="btn btn-ghost" href="#equipe">L’équipe</a>
+            <a data-edit="accueil.bouton-discord" class="btn btn-ghost" href="https://discord.gg/bNDKVDSaz" target="_blank" rel="noreferrer">Discord</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap gallery-section" id="equipe">
+        <div class="section-head">
+          <div>
+            <p data-edit="accueil.equipe-surtitre" class="kicker">Staff</p>
+            <h2 data-edit="accueil.equipe-titre">L’équipe du serveur</h2>
+          </div>
+          <button class="btn btn-ghost" id="editTeam" type="button" hidden>Modifier l’équipe</button>
+        </div>
+        <div class="org-chart" id="teamGrid"></div>
+        <form class="setup-box" id="teamEditor" hidden>
+          <div id="teamFields"></div>
+          <div class="editor-bar">
+            <button class="btn btn-ghost" id="addMember" type="button">Ajouter un membre</button>
+            <button class="btn btn-gold" type="submit">Enregistrer l’équipe</button>
+            <button class="btn btn-ghost" id="cancelTeam" type="button">Annuler</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <p>© <span id="year"></span> Los Santos Reborn</p>
+        <div>
+          <a href="/tickets">Tickets</a>
+          ·
+          <a href="/whitelist">Whitelist</a>
+          ·
+          <a href="/reglement">Règlement</a>
+        </div>
+      </div>
+    </footer>
