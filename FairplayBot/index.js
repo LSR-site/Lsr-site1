@@ -573,24 +573,25 @@ async function supabase(pathname, options = {}) {
 
 // Les écritures du bot passent une par une ; si le site a écrit entre-temps, on recommence
 let siteQueue = Promise.resolve();
-function updateTickets(change) {
-  const run = siteQueue.then(() => writeTickets(change));
+function updateData(key, change) {
+  const run = siteQueue.then(() => writeData(key, change));
   siteQueue = run.catch(() => {});
   return run;
 }
+const updateTickets = (change) => updateData("tickets", change);
 
-async function writeTickets(change) {
+async function writeData(key, change) {
   for (let i = 0; i < 8; i++) {
     if (i) await new Promise((r) => setTimeout(r, 100 + Math.random() * 300));
-    const row = (await supabase("site_data?key=eq.tickets&select=value,updated_at"))[0];
+    const row = (await supabase(`site_data?key=eq.${key}&select=value,updated_at`))[0];
     const data = row?.value || {};
     data.items = Array.isArray(data.items) ? data.items : [];
     data.nextNumber = Number(data.nextNumber) || 1;
     if (change(data) === false) return data;
     const stamp = new Date().toISOString();
     const done = row
-      ? await supabase(`site_data?key=eq.tickets&updated_at=eq.${encodeURIComponent(row.updated_at)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ value: data, updated_at: stamp }) })
-      : await supabase("site_data", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify({ key: "tickets", value: data, updated_at: stamp }) });
+      ? await supabase(`site_data?key=eq.${key}&updated_at=eq.${encodeURIComponent(row.updated_at)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ value: data, updated_at: stamp }) })
+      : await supabase("site_data", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify({ key, value: data, updated_at: stamp }) });
     if (done?.length) return data;
   }
   throw new Error("trop de modifications en même temps");
@@ -659,29 +660,208 @@ async function mirrorToSite(message) {
   });
 }
 
+// =========================
+// DEMANDES DU SITE → exécutées par le bot (le site n'appelle jamais Discord lui-même)
+// =========================
+const SITE_TO_BOT_TYPE = { candidature: "candidature_staff", "mort-rp": "mort_rp", direction: "gerant", donation: "dons", vehicule: "vip", autre: "boutique" };
+const WL_ROLE_ID = process.env.WL_ROLE_ID || process.env.DISCORD_WL_ROLE_ID;
+const SITE_ANNONCE_CHANNEL_ID = process.env.SITE_ANNONCE_CHANNEL_ID || process.env.DISCORD_ANNOUNCE_CHANNEL_ID;
+const SITE_ANNONCE_ROLE_ID = process.env.SITE_ANNONCE_ROLE_ID || process.env.DISCORD_ANNOUNCE_ROLE_ID || REGLEMENT_ROLE_ID;
+const siteGuild = () => client.guilds.cache.get(GUILD_ID) || client.guilds.cache.first();
+const findChannel = async (guild, id) => guild.channels.cache.get(id) || (await guild.channels.fetch(id).catch(() => null));
+const closeTicketRow = () => new ActionRowBuilder().addComponents(
+  new ButtonBuilder().setCustomId("close_ticket").setLabel("🔒 Fermer le ticket").setStyle(ButtonStyle.Danger)
+);
+
+// Ticket ouvert sur le site : le bot crée le salon avec les mêmes accès que ses propres tickets
+async function createSiteTicketChannel(guild, t) {
+  const ticket = ticketTypes[SITE_TO_BOT_TYPE[t.category] || t.category] || ticketTypes.support;
+  const roleIds = [...new Set((ticket.roleIds || []).filter(Boolean))];
+  const slug = String(t.authorName || "joueur").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "joueur";
+  const channel = await guild.channels.create({
+    name: `ticket-${t.number}-${slug}`,
+    type: ChannelType.GuildText,
+    parent: CATEGORY_IDS[ticket.type] || process.env.DISCORD_TICKET_CATEGORY_ID || null,
+    permissionOverwrites: [
+      { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+      ...roleIds.map((id) => ({ id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageMessages] })),
+      { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] }
+    ]
+  });
+  const first = (t.messages || [])[0] || {};
+  const embed = new EmbedBuilder()
+    .setColor(ORANGE)
+    .setAuthor({ name: "Los Santos Reborn | Ticket du site", iconURL: LOGO })
+    .setTitle(`Ticket #${t.number} · ${t.subject}`.slice(0, 256))
+    .setDescription((first.content || "—").slice(0, 4000))
+    .addFields({ name: "👤 Joueur", value: t.authorName || "—", inline: true }, { name: "📂 Type", value: ticket.label, inline: true })
+    .setFooter({ text: "Réponds ici : le joueur voit la réponse sur le site." })
+    .setTimestamp();
+  if (first.image) embed.setImage(first.image);
+  if (first.link) embed.setURL(first.link);
+  await channel.send({ content: roleIds.map((id) => `<@&${id}>`).join(" ") || undefined, embeds: [embed], components: [closeTicketRow()] });
+  sendLog(guild, LOG_TICKET_CHANNEL_ID, new EmbedBuilder()
+    .setColor(GREEN)
+    .setTitle("🎫 Ticket ouvert (site)")
+    .addFields({ name: "👤 Joueur", value: t.authorName || "—", inline: true }, { name: "📂 Type", value: ticket.label, inline: true }, { name: "📄 Salon", value: `${channel}`, inline: true })
+    .setTimestamp());
+  siteTicketChannels.add(channel.id);
+  return channel.id;
+}
+
+async function processSiteTickets(guild) {
+  const data = (await supabase("site_data?key=eq.tickets&select=value"))[0]?.value || {};
+  const items = data.items || [];
+  const created = {}, failed = {}, posted = {}, deleted = [];
+  for (const t of items.filter((x) => x.needsChannel && !x.channelId)) {
+    try {
+      created[t.id] = await createSiteTicketChannel(guild, t);
+    } catch (error) {
+      failed[t.id] = error.message;
+      console.error(`❌ Site : salon du ticket #${t.number} impossible :`, error.message);
+    }
+  }
+  for (const t of items) {
+    const channelId = t.channelId || created[t.id];
+    const waiting = (t.messages || []).filter((m) => m.pending);
+    if (!channelId || !waiting.length) continue;
+    const channel = await findChannel(guild, channelId);
+    if (!channel) continue;
+    for (const m of waiting) {
+      const head = m.from === "staff" ? "🛡️ **Staff**" : `📩 **${m.author}**`;
+      const sent = await channel.send({
+        content: [head, m.content, m.link].filter(Boolean).join("\n").slice(0, 2000),
+        embeds: m.image ? [new EmbedBuilder().setColor(ORANGE).setImage(m.image)] : [],
+        allowedMentions: { parse: [] }
+      }).catch((error) => console.error("❌ Site : message non envoyé :", error.message));
+      if (sent) posted[m.id] = sent.id;
+    }
+  }
+  for (const channelId of data.deleteChannels || []) {
+    const channel = await findChannel(guild, channelId);
+    siteTicketChannels.delete(channelId);
+    if (channel) await channel.delete("Ticket fermé sur le site").catch(() => {});
+    deleted.push(channelId);
+  }
+  if (!Object.keys(created).length && !Object.keys(failed).length && !Object.keys(posted).length && !deleted.length) return;
+  await updateTickets((latest) => {
+    for (const t of latest.items) {
+      if (created[t.id]) Object.assign(t, { channelId: created[t.id], needsChannel: false });
+      if (failed[t.id]) Object.assign(t, { needsChannel: false, discordError: failed[t.id] });
+      for (const m of t.messages || []) if (posted[m.id]) Object.assign(m, { discordId: posted[m.id], pending: false });
+    }
+    latest.deleteChannels = (latest.deleteChannels || []).filter((id) => !deleted.includes(id));
+  });
+}
+
+async function findMemberByName(guild, name) {
+  const wanted = String(name || "").trim().toLowerCase().replace(/^@/, "").split("#")[0];
+  if (!wanted) return null;
+  const found = await guild.members.search({ query: wanted, limit: 10 }).catch(() => null);
+  return [...(found?.values() || [])].find((m) => [m.user.username, m.user.globalName, m.nickname].some((n) => String(n || "").toLowerCase() === wanted)) || null;
+}
+
+async function whitelistToDiscord(guild, job) {
+  const member = await findMemberByName(guild, job.discord);
+  if (!member) return `Discord : « ${job.discord} » introuvable sur le serveur, rien n'a été envoyé.`;
+  const accepted = job.status === "accepted";
+  const done = [];
+  if (accepted && WL_ROLE_ID) {
+    done.push(await member.roles.add(WL_ROLE_ID).then(() => "rôle WL donné", () => "rôle WL refusé (le rôle du bot doit être au-dessus)"));
+  }
+  const dm = new EmbedBuilder()
+    .setColor(accepted ? GREEN : RED)
+    .setAuthor({ name: "Los Santos Reborn | Whitelist", iconURL: LOGO })
+    .setTitle(accepted ? "✅ Whitelist acceptée" : "❌ Whitelist refusée")
+    .setDescription([`Ta demande de whitelist **#${job.number}** (${job.name}) a été ${accepted ? "acceptée" : "refusée"}.`, job.staffNote].filter(Boolean).join("\n\n"))
+    .setTimestamp();
+  done.push(await member.send({ embeds: [dm] }).then(() => "message privé envoyé", () => "message privé impossible (MP fermés)"));
+  return `Discord : ${done.join(", ")}.`;
+}
+
+async function publishSiteAnnonce(guild, job) {
+  const channel = SITE_ANNONCE_CHANNEL_ID && (await findChannel(guild, SITE_ANNONCE_CHANNEL_ID));
+  if (!channel) throw new Error("SITE_ANNONCE_CHANNEL_ID manquant ou salon introuvable");
+  const embed = new EmbedBuilder()
+    .setColor(ORANGE)
+    .setAuthor({ name: "Los Santos Reborn | Annonce", iconURL: LOGO })
+    .setTitle(`📢 ${job.title}`.slice(0, 256))
+    .setDescription(job.text.slice(0, 4000))
+    .setThumbnail(LOGO)
+    .setTimestamp();
+  if (job.image || BANNER_ANNONCE) embed.setImage(job.image || BANNER_ANNONCE);
+  const ping = job.ping === "everyone" ? "@everyone" : job.ping === "role" && SITE_ANNONCE_ROLE_ID ? `<@&${SITE_ANNONCE_ROLE_ID}>` : "";
+  await channel.send({ content: ping || undefined, embeds: [embed], allowedMentions: { parse: job.ping === "everyone" ? ["everyone"] : [], roles: ping && job.ping === "role" ? [SITE_ANNONCE_ROLE_ID] : [] } });
+}
+
+async function processSiteJobs(guild) {
+  const jobs = (await supabase("site_data?key=eq.discord_jobs&select=value"))[0]?.value?.items || [];
+  if (!jobs.length) return;
+  const done = [], notes = [];
+  for (const job of jobs) {
+    try {
+      if (job.type === "annonce") await publishSiteAnnonce(guild, job);
+      if (job.type === "whitelist") notes.push({ casierId: job.casierId, text: await whitelistToDiscord(guild, job) });
+    } catch (error) {
+      console.error(`❌ Site : demande ${job.type} :`, error.message);
+      if (job.type === "whitelist") notes.push({ casierId: job.casierId, text: `Discord : échec (${error.message}).` });
+    }
+    done.push(job.id);
+  }
+  await updateData("discord_jobs", (d) => { d.items = d.items.filter((j) => !done.includes(j.id)); });
+  if (notes.length) {
+    await updateData("casiers", (d) => {
+      for (const n of notes) {
+        const casier = d.items.find((c) => c.id === n.casierId);
+        if (!casier) continue;
+        const note = { id: crypto.randomUUID(), kind: "system", text: n.text, createdAt: new Date().toISOString(), createdBy: "Bot Discord" };
+        casier.notes = [note, ...(casier.notes || [])];
+        casier.updatedAt = note.createdAt;
+      }
+    });
+  }
+}
+
+// Rôles et membres Discord recopiés pour l'organigramme du site
+async function sendDiscordCache(guild) {
+  const members = await guild.members.fetch().catch(() => null);
+  if (!members) return;
+  const roles = [...guild.roles.cache.values()]
+    .filter((r) => r.id !== guild.id && !r.managed)
+    .sort((a, b) => b.position - a.position)
+    .map((r) => ({ id: r.id, name: r.name }));
+  const list = [...members.values()].filter((m) => !m.user.bot).map((m) => ({ id: m.id, name: m.displayName, roles: [...m.roles.cache.keys()].filter((id) => id !== guild.id) }));
+  await supabase("site_data", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ key: "discord_cache", value: { roles, members: list }, updated_at: new Date().toISOString() }) });
+}
+
+let siteWorking = false;
+async function siteWorker() {
+  const guild = siteGuild();
+  if (siteWorking || !guild) return;
+  siteWorking = true;
+  try {
+    await processSiteTickets(guild);
+    await processSiteJobs(guild);
+  } catch (error) {
+    console.error("❌ Site :", error.message);
+  } finally {
+    siteWorking = false;
+  }
+}
+
 client.once("clientReady", () => {
   if (!siteLinked()) return;
   console.log("🔗 Lié au site via Supabase");
   refreshSiteTickets();
   setInterval(refreshSiteTickets, 20000);
+  setInterval(siteWorker, 3000);
+  const cache = () => { const g = siteGuild(); if (g) sendDiscordCache(g).catch((error) => console.error("❌ Site :", error.message)); };
+  cache();
+  setInterval(cache, 5 * 60 * 1000);
 });
 
 client.on("messageCreate", async (message) => {
   if (!siteLinked() || !message.guild) return;
-
-  // Ticket ouvert sur le site : bouton Fermer + log
-  if (message.author.id === client.user.id && message.embeds[0]?.title?.startsWith("Ticket #")) {
-    siteTicketChannels.add(message.channel.id);
-    sendLog(message.guild, LOG_TICKET_CHANNEL_ID, new EmbedBuilder()
-      .setColor(GREEN)
-      .setTitle("🎫 Ticket ouvert (site)")
-      .addFields({ name: "📄 Salon", value: `${message.channel}` }, { name: "📝 Sujet", value: message.embeds[0].title })
-      .setTimestamp());
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("close_ticket").setLabel("🔒 Fermer le ticket").setStyle(ButtonStyle.Danger)
-    );
-    return message.channel.send({ content: "Le staff peut répondre ici, la réponse s'affiche sur le site.", components: [row] }).catch(() => {});
-  }
 
   if (message.author.bot || !siteTicketChannels.has(message.channel.id)) return;
   mirrorToSite(message).catch((error) => console.error("❌ Site :", error.message));
