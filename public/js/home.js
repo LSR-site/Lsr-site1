@@ -1,5 +1,6 @@
 (() => {
   let home = { levels: [], team: [] };
+  let discordRoles = [];
 
   function card(member, top) {
     return `
@@ -45,12 +46,17 @@
   }
 
   function levelCard(level) {
+    const roles = discordRoles.length
+      ? `<select class="f-role-id"><option value="">Pas lié à Discord (membres ajoutés à la main)</option>${discordRoles
+          .map((r) => `<option value="${r.id}"${r.id === level.roleId ? " selected" : ""}>Rôle Discord : ${escapeHtml(r.name)}</option>`)
+          .join("")}</select>`
+      : "";
     const c = row("lv-card", `
       <div class="editor-card-top">
         <input class="f-level" value="${escapeHtml(level.name)}" placeholder="Nom du niveau (ex. Direction)" maxlength="40">
         <button class="btn btn-ghost btn-compact up" type="button">↑</button>
         <button class="btn btn-ghost btn-compact remove" type="button">Supprimer</button>
-      </div>`);
+      </div>${roles}`);
     c.dataset.id = level.id;
     c.querySelector(".f-level").oninput = refreshSelects;
     c.querySelector(".up").onclick = () => {
@@ -75,7 +81,8 @@
     return c;
   }
 
-  function openEditor() {
+  async function openEditor() {
+    discordRoles = (await api("/api/discord/roles").catch(() => ({ roles: [] }))).roles;
     const box = $("#teamFields");
     box.innerHTML = `
       <p class="kicker">Niveaux de l’organigramme (du haut vers le bas)</p><div id="lvList"></div>
@@ -83,7 +90,8 @@
       <p class="kicker">Membres</p><div id="mbList"></div>`;
     home.levels.forEach((l) => $("#lvList").append(levelCard(l)));
     home.team.forEach((m) => $("#mbList").append(memberCard(m)));
-    $("#addLevel").onclick = () => ($("#lvList").append(levelCard({ id: crypto.randomUUID(), name: "" })), refreshSelects());
+    $("#addLevel").onclick = () => ($("#lvList").append(levelCard({ id: crypto.randomUUID(), name: "", roleId: "" })), refreshSelects());
+    $("#syncTeam").hidden = !discordRoles.length;
     $("#teamEditor").hidden = false;
   }
 
@@ -91,9 +99,8 @@
   $("#cancelTeam").onclick = () => ($("#teamEditor").hidden = true);
   $("#addMember").onclick = () => $("#mbList").append(memberCard({ id: crypto.randomUUID(), name: "", role: "", level: "", bio: "" }));
 
-  $("#teamEditor").onsubmit = async (event) => {
-    event.preventDefault();
-    const levels = levelInputs().map((c) => ({ id: c.dataset.id, name: c.querySelector(".f-level").value }));
+  async function save() {
+    const levels = levelInputs().map((c) => ({ id: c.dataset.id, name: c.querySelector(".f-level").value, roleId: c.querySelector(".f-role-id")?.value || "" }));
     const team = [...$("#mbList").children].map((c) => ({
       id: c.dataset.id,
       name: c.querySelector(".f-name").value,
@@ -102,8 +109,25 @@
       bio: c.querySelector(".f-bio").value,
     }));
     home = await api("/api/home", { method: "POST", body: JSON.stringify({ levels, team }) });
+  }
+
+  $("#teamEditor").onsubmit = async (event) => {
+    event.preventDefault();
+    await save();
     $("#teamEditor").hidden = true;
     renderTeam();
+  };
+
+  // Enregistre, puis remplit les niveaux liés avec les membres qui ont le rôle sur Discord
+  $("#syncTeam").onclick = async () => {
+    try {
+      await save();
+      home = await api("/api/home/sync", { method: "POST", body: "{}" });
+      renderTeam();
+      openEditor();
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   (async () => {

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import express from "express";
 
@@ -15,15 +16,53 @@ async function supabase(path, options = {}) {
   if (!res.ok) throw new Error(`Supabase ${res.status} : ${await res.text()}`);
   return res.status === 204 || res.status === 201 ? null : res.json();
 }
-const readJson = async (name, fallback) => (await supabase(`site_data?key=eq.${name}&select=value`))[0]?.value ?? fallback;
-const writeJson = async (name, value) => {
-  await supabase("site_data", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ key: name, value }) });
+// Chaque lecture garde la version (updated_at) : si le bot a écrit entre-temps, l'écriture est refusée au lieu d'écraser
+const versions = new WeakMap();
+async function readRow(name) {
+  return (await supabase(`site_data?key=eq.${name}&select=value,updated_at`))[0] || null;
+}
+const readJson = async (name, fallback) => (await readRow(name))?.value ?? fallback;
+async function writeJson(name, value) {
+  const version = versions.get(value);
+  if (version) {
+    const done = await supabase(`site_data?key=eq.${name}&updated_at=eq.${encodeURIComponent(version)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ value, updated_at: now() }),
+    });
+    if (!done?.length) {
+      const err = new Error("Quelqu’un vient de modifier en même temps. Réessaie.");
+      err.status = 409;
+      throw err;
+    }
+    versions.set(value, done[0].updated_at);
+    return value;
+  }
+  await supabase("site_data", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ key: name, value, updated_at: now() }) });
   return value;
-};
+}
 const readList = async (name) => {
-  const raw = await readJson(name, {});
-  return { nextNumber: Number(raw.nextNumber) || 1, items: Array.isArray(raw.items) ? raw.items : [] };
+  const row = await readRow(name);
+  const raw = row?.value || {};
+  const list = { ...raw, nextNumber: Number(raw.nextNumber) || 1, items: Array.isArray(raw.items) ? raw.items : [] };
+  if (row) versions.set(list, row.updated_at);
+  return list;
 };
+
+// Lire → modifier → écrire, en recommençant si le bot a écrit au même moment
+async function updateList(name, change) {
+  for (let i = 0; ; i++) {
+    const data = await readList(name);
+    const result = change(data);
+    try {
+      await writeJson(name, data);
+      return result;
+    } catch (err) {
+      if (err.status !== 409 || i >= 6) throw err;
+      await new Promise((r) => setTimeout(r, 100 + Math.random() * 300));
+    }
+  }
+}
 
 const env = (key) => String(process.env[key] || "").trim();
 const now = () => new Date().toISOString();
@@ -160,7 +199,11 @@ async function readHome() {
 
 // Organigramme libre : niveaux et rôles nommés par le fondateur
 function writeHome({ levels, team }) {
-  const lv = (levels || []).slice(0, 12).map((l) => ({ id: String(l.id || uid()).slice(0, 60), name: text(l.name, 40) || "Niveau" }));
+  const lv = (levels || []).slice(0, 12).map((l) => ({
+    id: String(l.id || uid()).slice(0, 60),
+    name: text(l.name, 40) || "Niveau",
+    roleId: isSnowflake(String(l.roleId || "")) ? String(l.roleId) : "",
+  }));
   return writeJson("home", {
     levels: lv,
     team: (team || []).slice(0, 40).map((m) => ({
@@ -188,7 +231,7 @@ let botUser = { at: 0, user: null };
 async function discord(pathname, options = {}) {
   const token = env("DISCORD_BOT_TOKEN");
   if (!token) throw new Error("Le bot Discord n’est pas encore branché.");
-  const res = await fetch(`https://discord.com/api/v10${pathname}`, {
+  const res = await fetch(`${env("DISCORD_API") || "https://discord.com/api/v10"}${pathname}`, {
     ...options,
     headers: { Authorization: `Bot ${token}`, Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}) },
   });
@@ -271,11 +314,12 @@ function addDiscordMessage(ticket, message) {
   const image = httpsUrl(attachment?.url || embed?.image?.url);
   const link = httpsUrl(embed?.url);
   if (message.author?.bot) {
-    if (/^📩/.test(content) || String(embed?.title || "").startsWith("Ticket #")) return false;
+    if (/^📩/.test(content) || String(embed?.title || "").startsWith("Ticket #") || message.components?.length) return false;
     content = content.replace(/^🛡️\s*\*\*Staff(?:\s*·\s*[^*]+)?\*\*\s*\n?/, "").trim();
   }
   if (!content && !image && !link) return false;
-  ticket.messages.push({ id: uid(), from: "staff", author: "Staff", content, image, link, createdAt: message.timestamp || now(), discordId });
+  const player = ticket.discordUserId && message.author?.id === ticket.discordUserId;
+  ticket.messages.push({ id: uid(), from: player ? "player" : "staff", author: player ? ticket.authorName : "Staff", content, image, link, createdAt: message.timestamp || now(), discordId });
   return true;
 }
 
@@ -289,6 +333,53 @@ async function syncTicket(ticket) {
     if (err.code === 10003) return false; // salon supprimé sur Discord
   }
   return true;
+}
+
+// ---------- Discord : whitelist, annonces, équipe ----------
+async function findMember(name) {
+  const wanted = discordId(name).replace(/^@/, "").split("#")[0];
+  if (!wanted || !env("DISCORD_BOT_TOKEN")) return null;
+  const found = await discord(`/guilds/${guildId()}/members/search?query=${encodeURIComponent(wanted)}&limit=10`).catch(() => []);
+  return (Array.isArray(found) ? found : []).find((m) => [m.user?.username, m.user?.global_name, m.nick].some((n) => discordId(n) === wanted)) || null;
+}
+
+// Décision WL : rôle WL si acceptée + message privé au joueur. Renvoie une ligne pour le casier.
+async function notifyWhitelist(item) {
+  if (!env("DISCORD_BOT_TOKEN")) return "";
+  const member = await findMember(item.discord);
+  if (!member) return `Discord : « ${item.discord} » introuvable sur le serveur, rien n’a été envoyé.`;
+  const done = [];
+  const role = env("DISCORD_WL_ROLE_ID");
+  if (item.status === "accepted" && role) {
+    const ok = await discord(`/guilds/${guildId()}/members/${member.user.id}/roles/${role}`, { method: "PUT" }).then(() => true, () => false);
+    done.push(ok ? "rôle WL donné" : "rôle WL refusé (vérifie que le rôle du bot est au-dessus)");
+  }
+  const accepted = item.status === "accepted";
+  const dm = await post("/users/@me/channels", { recipient_id: member.user.id }).catch(() => null);
+  const sent = dm && (await sendToChannel(dm.id, "", [{
+    title: accepted ? "✅ Whitelist acceptée" : "❌ Whitelist refusée",
+    description: [`Ta demande de whitelist **#${item.number}** (${item.name}) a été ${accepted ? "acceptée" : "refusée"}.`, item.staffNote].filter(Boolean).join("\n\n"),
+    color: accepted ? 0x3d9b6e : 0xc41e3a,
+    footer: { text: "Los Santos Reborn" },
+  }]).then(() => true, () => false));
+  done.push(sent ? "message privé envoyé" : "message privé impossible (MP fermés)");
+  return `Discord : ${done.join(", ")}.`;
+}
+
+async function guildRoles() {
+  const roles = await discord(`/guilds/${guildId()}/roles`);
+  return roles.filter((r) => r.id !== guildId() && !r.managed).sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name }));
+}
+
+async function guildMembers() {
+  let all = [], after = "0";
+  for (let i = 0; i < 10; i++) {
+    const page = await discord(`/guilds/${guildId()}/members?limit=1000&after=${after}`);
+    all = all.concat(page);
+    if (page.length < 1000) break;
+    after = page.at(-1).user.id;
+  }
+  return all.filter((m) => !m.user?.bot);
 }
 
 // ---------- Tickets ----------
@@ -468,6 +559,55 @@ app.post("/api/home", async (req, res) => {
   res.json(await writeHome({ levels: req.body?.levels ?? current.levels, team: req.body?.team ?? current.team }));
 });
 
+// Équipe ↔ rôles Discord
+app.get("/api/discord/roles", async (req, res) => {
+  if (!requirePerm(req, res, "team")) return;
+  res.json({ roles: env("DISCORD_BOT_TOKEN") ? await guildRoles().catch(() => []) : [] });
+});
+
+app.post("/api/home/sync", async (req, res) => {
+  if (!requirePerm(req, res, "team")) return;
+  const home = await readHome();
+  const linked = home.levels.filter((l) => l.roleId);
+  if (!linked.length) return res.status(400).json({ error: "Relie d’abord un niveau à un rôle Discord, puis enregistre." });
+  const [members, roles] = await Promise.all([guildMembers(), guildRoles()]);
+  const old = new Map(home.team.map((m) => [m.id, m]));
+  const synced = linked.flatMap((level) =>
+    members
+      .filter((m) => m.roles.includes(level.roleId))
+      .map((m) => {
+        const id = `d-${m.user.id}`;
+        const name = m.nick || m.user.global_name || m.user.username;
+        return { id, name, role: old.get(id)?.role || roles.find((r) => r.id === level.roleId)?.name || "", level: level.id, bio: old.get(id)?.bio || "" };
+      })
+  );
+  const kept = home.team.filter((m) => !linked.some((l) => l.id === m.level));
+  res.json(await writeHome({ levels: home.levels, team: [...kept, ...synced] }));
+});
+
+// Annonce publiée sur Discord depuis le site
+app.post("/api/discord/annonce", async (req, res) => {
+  if (!requirePerm(req, res, "site")) return;
+  const channel = env("DISCORD_ANNOUNCE_CHANNEL_ID");
+  if (!channel) return res.status(400).json({ error: "Ajoute DISCORD_ANNOUNCE_CHANNEL_ID (le salon des annonces) dans les variables de l’hébergeur." });
+  const title = text(req.body?.title, 200);
+  const body = text(req.body?.text, 4000);
+  if (!title || !body) return res.status(400).json({ error: "Mets un titre et un texte." });
+  const role = env("DISCORD_ANNOUNCE_ROLE_ID");
+  const ping = req.body?.ping === "everyone" ? "@everyone" : req.body?.ping === "role" && role ? `<@&${role}>` : "";
+  const image = httpsUrl(req.body?.image);
+  try {
+    await post(`/channels/${channel}/messages`, {
+      content: ping,
+      allowed_mentions: { parse: ping === "@everyone" ? ["everyone"] : [], roles: ping && ping !== "@everyone" ? [role] : [] },
+      embeds: [{ title: `📢 ${title}`, description: body, color: 0xff9f00, image: image ? { url: image } : undefined, footer: { text: "Los Santos Reborn" }, timestamp: now() }],
+    });
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
+  res.json({ ok: true });
+});
+
 // Textes du site (mode édition fondateur)
 const DISCORD_DEFAULT = "https://discord.gg/bNDKVDSaz";
 const readSite = async () => ({ texts: {}, discord: DISCORD_DEFAULT, ...(await readJson("site", {})) });
@@ -531,9 +671,11 @@ app.post("/api/tickets", async (req, res) => {
     discordError = err.message;
     console.log(`Ticket #${ticket.number} Discord : ${discordError}`);
   }
-  data.nextNumber += 1;
-  data.items = [ticket, ...data.items].slice(0, 400);
-  await writeJson("tickets", data);
+  await updateList("tickets", (latest) => {
+    if (latest.items.some((t) => t.number === ticket.number)) ticket.number = latest.nextNumber;
+    latest.nextNumber = ticket.number + 1;
+    latest.items = [ticket, ...latest.items].slice(0, 400);
+  });
   remember(req, "ticketKeys", ticket, 20);
   res.json({ ticket: publicTicket(ticket, true), discordError });
 });
@@ -549,7 +691,8 @@ app.get("/api/tickets/:id", async (req, res) => {
     return res.status(404).json({ error: "Ticket introuvable." });
   }
   remember(req, "ticketKeys", ticket, 20);
-  if (ticket.messages.length !== before) await writeJson("tickets", data);
+  // Si le bot a écrit en même temps, il a déjà enregistré ces messages : rien à faire
+  if (ticket.messages.length !== before) await writeJson("tickets", data).catch((err) => { if (err.status !== 409) throw err; });
   res.json({ ticket: publicTicket(ticket, !can(req, "tickets")) });
 });
 
@@ -570,9 +713,12 @@ app.post("/api/tickets/:id/messages", async (req, res) => {
       return res.status(502).json({ error: err.message || "Impossible d’envoyer le message sur Discord." });
     }
   }
-  ticket.messages.push(msg);
-  await writeJson("tickets", data);
-  res.json({ ticket: publicTicket(ticket, !staff) });
+  const saved = await updateList("tickets", (latest) => {
+    const t = latest.items.find((x) => x.id === ticket.id);
+    if (t) t.messages = [...(t.messages || []), msg];
+    return t || { ...ticket, messages: [...ticket.messages, msg] };
+  });
+  res.json({ ticket: publicTicket(saved, !staff) });
 });
 
 app.post("/api/tickets/:id/close", async (req, res) => {
@@ -580,8 +726,9 @@ app.post("/api/tickets/:id/close", async (req, res) => {
   if (!found) return;
   const { data, ticket } = found;
   if (ticket.channelId) await discord(`/channels/${ticket.channelId}`, { method: "DELETE" }).catch(() => {});
-  data.items = data.items.filter((t) => t.id !== ticket.id);
-  await writeJson("tickets", data);
+  await updateList("tickets", (latest) => {
+    latest.items = latest.items.filter((t) => t.id !== ticket.id);
+  });
   req.session.ticketKeys = (req.session.ticketKeys || []).filter((e) => e.id !== ticket.id);
   res.json({ deleted: true, id: ticket.id });
 });
@@ -634,8 +781,8 @@ app.post("/api/whitelist/:id/casier", async (req, res) => {
   if (item.status !== "pending") return res.status(400).json({ error: "Un casier existe déjà pour ce joueur." });
   const other = data.items.find((i) => i.id !== item.id && discordId(i.discord) === discordId(item.discord) && ["casier", "pending"].includes(i.status));
   if (other) return res.status(400).json({ error: `Ce Discord a déjà le dossier #${other.number} ouvert. Ferme-le avant d’en créer un autre.` });
+  const casiers = await syncCasiers(data);
   Object.assign(item, { status: "casier", casierNote: text(req.body?.casierNote, 800), casierAt: now(), casierBy: staffName(req) });
-  const casiers = await syncCasiers();
   const casier = linkCasier(casiers, item, item.casierBy, item.casierNote ? { kind: "comment", text: item.casierNote, by: item.casierBy } : null);
   await Promise.all([writeJson("casiers", casiers), writeJson("whitelist", data)]);
   res.json({ item: publicWhitelist(item, { staff: true }), casier: publicCasier(casier, item) });
@@ -654,10 +801,12 @@ app.post("/api/whitelist/:id/status", async (req, res) => {
   if (vocalNote.length < 8) return res.status(400).json({ error: "Indique le compte-rendu du vocal avant d’accepter ou de refuser." });
   const by = staffName(req);
   Object.assign(item, { vocalNote, vocalAt: now(), vocalBy: by, status, staffNote: text(req.body?.staffNote, 500), decidedAt: now(), decidedBy: by });
-  const casiers = await syncCasiers();
+  const casiers = await syncCasiers(data);
   const casier = linkCasier(casiers, item, by, { kind: "vocal", text: vocalNote, by });
   addNote(casier, { kind: "system", text: `WL #${item.number} ${status === "accepted" ? "acceptée" : "refusée"} après vocal.`, by });
   if (item.staffNote) addNote(casier, { kind: "comment", text: `Message joueur : ${item.staffNote}`, by });
+  const discordNote = await notifyWhitelist(item).catch(() => "Discord : envoi impossible.");
+  if (discordNote) addNote(casier, { kind: "system", text: discordNote, by });
   await Promise.all([writeJson("casiers", casiers), writeJson("whitelist", data)]);
   res.json({ item: publicWhitelist(item, { staff: true }), casier: publicCasier(casier, item) });
 });
@@ -763,13 +912,13 @@ app.get(["/wl", "/boutique"], (req, res) => res.redirect(req.path === "/wl" ? "/
 
 // Erreur imprévue (ex. Supabase injoignable) : réponse propre au lieu d'un plantage
 app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ error: "Erreur serveur. Réessaie dans un instant." });
+  if (err.status !== 409) console.error(err);
+  res.status(err.status === 409 ? 409 : 500).json({ error: err.status === 409 ? err.message : "Erreur serveur. Réessaie dans un instant." });
 });
 
 // En local : npm start (les fichiers de public/ sont servis ici ; sur Vercel, c'est le CDN qui s'en charge)
 if (!process.env.VERCEL) {
-  app.use(express.static("public"));
+  app.use(express.static(fileURLToPath(new URL("./public", import.meta.url))));
   const PORT = Number(process.env.PORT || 5173);
   app.listen(PORT, () => console.log(`Los Santos Reborn : http://localhost:${PORT}`));
 }

@@ -88,6 +88,49 @@
   Object.assign(window, { $, escapeHtml, api, initials });
   if ($("#year")) $("#year").textContent = new Date().getFullYear();
 
+  // Annonce publiée par le bot dans le salon des annonces Discord
+  function annonce() {
+    let modal = $("#annonceModal");
+    if (!modal) {
+      modal = Object.assign(document.createElement("div"), { className: "modal", id: "annonceModal" });
+      modal.innerHTML = `
+        <form class="modal-card" id="annonceForm">
+          <h2>Annonce Discord</h2>
+          <p class="muted">Le bot la publie dans le salon des annonces.</p>
+          <label>Titre <input name="title" required maxlength="200" /></label>
+          <label>Texte <textarea name="text" rows="6" required maxlength="4000"></textarea></label>
+          <label>Image (lien https, facultatif) <input name="image" type="url" /></label>
+          <label>Mention
+            <select name="ping">
+              <option value="everyone">@everyone</option>
+              <option value="role">Le rôle des annonces</option>
+              <option value="none">Personne</option>
+            </select>
+          </label>
+          <div class="modal-actions">
+            <button class="btn btn-gold" type="submit">Publier sur Discord</button>
+            <button class="btn btn-ghost" type="button" id="annonceClose">Fermer</button>
+          </div>
+          <p class="muted" id="annonceStatus"></p>
+        </form>`;
+      document.body.append(modal);
+      $("#annonceClose").onclick = () => modal.classList.remove("open");
+      $("#annonceForm").onsubmit = async (event) => {
+        event.preventDefault();
+        const status = $("#annonceStatus");
+        status.textContent = "Publication…";
+        try {
+          await api("/api/discord/annonce", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
+          event.target.reset();
+          status.textContent = "✅ Annonce publiée sur Discord.";
+        } catch (err) {
+          status.textContent = err.message;
+        }
+      };
+    }
+    modal.classList.add("open");
+  }
+
   // Mode édition : le fondateur clique sur les textes du site pour les changer
   function editBar() {
     if ($("#editBar")) return;
@@ -101,8 +144,11 @@
     const off = () => {
       document.body.classList.remove("editing");
       fields.forEach((el) => el.removeAttribute("contenteditable"));
-      bar.innerHTML = `<button class="btn btn-gold btn-compact" type="button" id="editOn">✎ Modifier le site</button>`;
+      bar.innerHTML = `
+        <button class="btn btn-gold btn-compact" type="button" id="editOn">✎ Modifier le site</button>
+        <button class="btn btn-ghost btn-compact" type="button" id="annonceOn">📢 Annonce Discord</button>`;
       $("#editOn").onclick = on;
+      $("#annonceOn").onclick = annonce;
     };
     const on = () => {
       document.body.classList.add("editing");

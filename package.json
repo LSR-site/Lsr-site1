@@ -1,15 +1,16 @@
 {
-  "name": "los-santos-reborn",
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": "22.x"
-  },
+  "name": "fairplaybot",
+  "version": "1.0.0",
+  "description": "Bot Discord Fairplay_RP",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
+  "keywords": [],
+  "author": "Dudu",
+  "license": "ISC",
   "dependencies": {
-    "dotenv": "^16.6.1",
-    "express": "^4.21.2"
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2"
   }
 }

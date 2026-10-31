@@ -674,7 +674,8 @@ button,
 }
 
 .modal-card input,
-.modal-card select {
+.modal-card select,
+.modal-card textarea {
   width: 100%;
   background: #0b0b0e;
   border: 1px solid var(--line);
