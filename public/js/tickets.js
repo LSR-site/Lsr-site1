@@ -241,6 +241,7 @@
     tickets = data.items || [];
     categories = data.categories || [];
     staff = Boolean(data.staff);
+    botWarning(data.botWarning);
     renderCategories();
     const wanted = new URLSearchParams(location.search).get("id") || tickets[0]?.id || "";
     renderList();

@@ -235,6 +235,15 @@ const queueJob = (job) => updateList("discord_jobs", (data) => {
 });
 // Rôles et membres Discord, recopiés par le bot toutes les quelques minutes
 const discordCache = () => readJson("discord_cache", { roles: [], members: [] });
+// Le bot écrit un signal de vie chaque minute : sans signal depuis 3 min, on prévient le staff
+async function botStatus() {
+  const status = await readJson("bot_status", null);
+  const online = Boolean(status?.at && Date.now() - Date.parse(status.at) < 3 * 60 * 1000);
+  if (!status) return "Le bot Discord n’est pas relié au site : les salons de tickets, rôles WL et annonces ne partiront pas. Mets le nouvel index.js sur ton hébergeur et redémarre le bot.";
+  if (!online) return "Le bot Discord ne répond plus depuis plusieurs minutes : vérifie qu’il est allumé.";
+  if (!status.wlRole) return "Le bot fonctionne, mais WL_ROLE_ID est vide dans son .env : le rôle WL ne sera pas donné.";
+  return "";
+}
 
 // ---------- Tickets ----------
 const publicTicket = (t, includeKey) => ({
@@ -474,6 +483,7 @@ app.get("/api/tickets", async (req, res) => {
   const items = (await readList("tickets")).items.filter((t) => staff || owns(req, "ticketKeys", t));
   res.json({
     staff,
+    botWarning: staff ? await botStatus() : "",
     categories: TICKET_CATEGORIES,
     items: items.sort(byNumberDesc).map((t) => publicTicket(t, !staff)),
   });
@@ -545,7 +555,7 @@ app.post("/api/tickets/:id/close", async (req, res) => {
 app.get("/api/whitelist", async (req, res) => {
   const staff = can(req, "tickets");
   const items = (await readList("whitelist")).items.filter((i) => staff || owns(req, "whitelistKeys", i));
-  res.json({ staff, items: items.sort(byNumberDesc).map((i) => publicWhitelist(i, { includeKey: !staff, staff })) });
+  res.json({ staff, botWarning: staff ? await botStatus() : "", items: items.sort(byNumberDesc).map((i) => publicWhitelist(i, { includeKey: !staff, staff })) });
 });
 
 app.post("/api/whitelist", async (req, res) => {

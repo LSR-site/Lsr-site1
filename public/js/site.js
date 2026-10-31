@@ -85,7 +85,18 @@
         .join("")
         .toUpperCase()
     );
-  Object.assign(window, { $, escapeHtml, api, initials });
+  // Alerte staff en haut de page (ex. bot Discord pas relié)
+  const botWarning = (message) => {
+    let box = $("#botWarning");
+    if (!message) return box?.remove();
+    if (!box) {
+      box = Object.assign(document.createElement("p"), { id: "botWarning", className: "bot-warning" });
+      const hero = document.querySelector(".page-hero");
+      hero ? hero.after(box) : document.querySelector("main")?.prepend(box);
+    }
+    box.textContent = `⚠️ ${message}`;
+  };
+  Object.assign(window, { $, escapeHtml, api, initials, botWarning });
   if ($("#year")) $("#year").textContent = new Date().getFullYear();
 
   // Annonce publiée par le bot dans le salon des annonces Discord

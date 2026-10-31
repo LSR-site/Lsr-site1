@@ -855,6 +855,12 @@ client.once("clientReady", () => {
   refreshSiteTickets();
   setInterval(refreshSiteTickets, 20000);
   setInterval(siteWorker, 3000);
+  console.log(`🤖 Demandes du site : traitement actif toutes les 3 s (rôle WL : ${WL_ROLE_ID ? "configuré" : "WL_ROLE_ID manquant"}, annonces : ${SITE_ANNONCE_CHANNEL_ID ? "configuré" : "SITE_ANNONCE_CHANNEL_ID manquant"})`);
+  // Signal de vie : le site affiche une alerte au staff si le bot ne répond plus
+  const alive = () => supabase("site_data", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ key: "bot_status", value: { at: new Date().toISOString(), wlRole: Boolean(WL_ROLE_ID), annonces: Boolean(SITE_ANNONCE_CHANNEL_ID) }, updated_at: new Date().toISOString() }) })
+    .catch((error) => console.error("❌ Site :", error.message));
+  alive();
+  setInterval(alive, 60 * 1000);
   const cache = () => { const g = siteGuild(); if (g) sendDiscordCache(g).catch((error) => console.error("❌ Site :", error.message)); };
   cache();
   setInterval(cache, 5 * 60 * 1000);

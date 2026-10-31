@@ -87,6 +87,7 @@
   async function load() {
     const data = await api("/api/whitelist");
     staff = Boolean(data.staff);
+    botWarning(data.botWarning);
     items = data.items || [];
     const pendingCount = items.filter((item) => item.status === "pending").length;
     const casierCount = items.filter((item) => item.status === "casier").length;
