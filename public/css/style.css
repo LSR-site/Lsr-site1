@@ -714,12 +714,22 @@ button,
   font-family: "Cinzel", serif;
 }
 
-.check-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.check-line,
+.setup-form .check-line {
+  display: block;
   color: var(--muted);
   margin: 12px 0;
+}
+
+.setup-form .check-line input {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0 8px 0 0;
+  padding: 0;
+  vertical-align: -4px;
+  accent-color: var(--gold);
 }
 
 .setup-form select,

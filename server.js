@@ -8,7 +8,11 @@ dotenv.config();
 
 // ---------- Stockage Supabase (une table site_data : clé -> JSON) ----------
 async function supabase(path, options = {}) {
-  const url = `${env("SUPABASE_URL").replace(/\/$/, "")}/rest/v1/${path}`;
+  // On garde seulement https://xxxx.supabase.co, même si l'adresse collée contient /rest/v1 ou autre chose
+  const raw = env("SUPABASE_URL");
+  const ref = raw.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/)?.[1];
+  const base = ref ? `https://${ref}.supabase.co` : /^https?:\/\//.test(raw) ? new URL(raw).origin : `https://${raw.split("/")[0]}`;
+  const url = `${base}/rest/v1/${path}`;
   const res = await fetch(url, {
     ...options,
     headers: { apikey: env("SUPABASE_SECRET_KEY"), "Content-Type": "application/json", ...options.headers },

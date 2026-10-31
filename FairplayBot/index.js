@@ -560,7 +560,10 @@ const ticketTypes = {
 const siteLinked = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
 
 async function supabase(pathname, options = {}) {
-  const res = await fetch(`${process.env.SUPABASE_URL.replace(/\/$/, "")}/rest/v1/${pathname}`, {
+  const raw = process.env.SUPABASE_URL.trim();
+  const ref = raw.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/)?.[1];
+  const base = ref ? `https://${ref}.supabase.co` : /^https?:\/\//.test(raw) ? new URL(raw).origin : `https://${raw.split("/")[0]}`;
+  const res = await fetch(`${base}/rest/v1/${pathname}`, {
     ...options,
     headers: { apikey: process.env.SUPABASE_SECRET_KEY, "Content-Type": "application/json", ...options.headers }
   });
