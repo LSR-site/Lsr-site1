@@ -1,0 +1,68 @@
+    <main class="wrap rules-page">
+      <header class="page-hero">
+        <p class="breadcrumb"><a href="/">Accueil</a><span>/</span>Whitelist</p>
+        <p data-edit="wl.surtitre" class="kicker">Candidature</p>
+        <div class="rules-head">
+          <h1 data-edit="wl.titre">Demande de WL</h1>
+          <p class="muted" id="wlMeta">Remplis le dossier. Le staff ouvre un casier, te convoque en vocal, puis décide.</p>
+        </div>
+      </header>
+
+      <div class="wl-layout">
+        <form id="wlForm" class="setup-box setup-form wl-form">
+          <h2 data-edit="wl.form-titre">Ton dossier</h2>
+          <p data-edit="wl.form-intro" class="muted">Sois sérieux et RP. Le staff ouvre un casier, te fait un vocal, puis accepte ou refuse.</p>
+          <div class="wl-grid">
+            <label>Discord <input name="discord" required minlength="2" maxlength="40" placeholder="Ex. sofia" /></label>
+            <label>Âge <input name="age" type="number" required min="16" max="80" placeholder="18" /></label>
+          </div>
+          <label>Nom RP <input name="name" required minlength="3" maxlength="40" placeholder="Ex. Sofia Moreau" /></label>
+          <label>Histoire du personnage
+            <textarea name="story" rows="7" required minlength="80" maxlength="4000" placeholder="Origine, famille, pourquoi tu arrives à Los Santos…"></textarea>
+          </label>
+          <label>Expérience RP
+            <textarea name="experience" rows="4" required minlength="10" maxlength="1500" placeholder="Serveurs déjà faits, style de jeu, ce que tu cherches."></textarea>
+          </label>
+          <label>Pourquoi Los Santos Reborn ?
+            <textarea name="motivation" rows="3" required minlength="10" maxlength="1200" placeholder="Ce qui t’attire sur ce serveur."></textarea>
+          </label>
+          <label>Micro
+            <select name="mic" required>
+              <option value="oui">Oui, j’ai un micro</option>
+              <option value="non">Non</option>
+            </select>
+          </label>
+          <label class="check-line">
+            <input name="rules" type="checkbox" required />
+            J’ai lu le <a href="/reglement" target="_blank" rel="noreferrer">règlement</a> et je m’engage à le respecter.
+          </label>
+          <button class="btn btn-gold" type="submit">Envoyer ma demande</button>
+          <p class="muted" id="wlError"></p>
+        </form>
+
+        <aside class="wl-side">
+          <div class="setup-box" id="wlMine"></div>
+          <div class="setup-box" id="wlStaff" hidden>
+            <h2>Demandes staff</h2>
+            <p class="muted">Un clic ouvre la fenêtre casier. Tu ne peux pas accepter ici : d’abord le casier, puis le vocal.</p>
+            <div class="wl-staff-filters">
+              <button class="btn btn-ghost btn-compact" type="button" data-filter="pending">Demandes</button>
+              <button class="btn btn-ghost btn-compact" type="button" data-filter="casier">Casiers / vocal</button>
+              <button class="btn btn-ghost btn-compact" type="button" data-filter="accepted">Acceptées</button>
+              <button class="btn btn-ghost btn-compact" type="button" data-filter="refused">Refusées</button>
+              <button class="btn btn-ghost btn-compact" type="button" data-filter="all">Toutes</button>
+            </div>
+            <div id="wlList" class="wl-list"></div>
+            <p class="muted" id="wlStaffError"></p>
+            <p><a href="/casiers">Voir tous les casiers</a></p>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <p>© <span id="year"></span> Los Santos Reborn</p>
+        <a data-edit="wl.pied" href="/reglement">Lire le règlement avant de postuler</a>
+      </div>
+    </footer>
