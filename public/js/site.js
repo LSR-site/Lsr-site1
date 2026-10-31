@@ -229,6 +229,7 @@
           <div class="auth-chip">
             <span class="grade-badge grade-${escapeHtml(this.me.grade || "admin")}">${escapeHtml(this.gradeLabel())}</span>
             <span>${escapeHtml(this.me.username || "Staff")}</span>
+            ${this.can("panel") ? `<a class="text-btn" href="/admin">Panel</a>` : ""}
             <button class="text-btn" id="staffLogout" type="button">Quitter</button>
           </div>`;
         document.querySelector("#staffLogout").onclick = async () => {

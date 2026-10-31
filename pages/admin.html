@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/img/logo.jpg" type="image/jpeg" />
+    <title>LSR Admin · Los Santos Reborn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
+  </head>
+  <body class="admin-body">
+    <aside class="admin-side">
+      <a class="admin-brand" href="/admin">LSR<br />ADMIN</a>
+      <p class="admin-kicker">Gestion du site</p>
+      <nav class="admin-nav" id="adminNav" hidden>
+        <button type="button" data-section="dashboard">◈ Tableau de bord</button>
+        <button type="button" data-section="tickets">🎫 Suivi des tickets</button>
+        <button type="button" data-section="tabs">☰ Onglets</button>
+        <button type="button" data-section="rules">📜 Règlement</button>
+        <button type="button" data-section="links">↗ Liens Discord</button>
+        <button type="button" data-section="texts">✎ Textes du site</button>
+        <button type="button" data-section="annonces">📢 Annonces Discord</button>
+        <button type="button" data-section="team">👥 Équipe</button>
+      </nav>
+      <div class="admin-side-foot">
+        <a href="/">↗ Voir le site</a>
+        <button class="admin-logout" id="adminLogout" type="button" hidden>Déconnexion</button>
+      </div>
+    </aside>
+
+    <main class="admin-main" id="adminMain">
+      <p class="muted">Chargement…</p>
+    </main>
+
+    <p class="admin-toast" id="adminToast" hidden></p>
+
+    <script src="/js/site.js"></script>
+    <script src="/js/admin.js"></script>
+  </body>
+</html>

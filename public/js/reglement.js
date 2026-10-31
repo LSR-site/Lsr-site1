@@ -12,6 +12,10 @@
   const leadText = rulesLead?.textContent || "";
   const saveStatus = document.querySelector("#saveStatus");
   const chapterLead = document.querySelector("#chapterLead");
+  const chapterDiscord = document.querySelector("#chapterDiscord");
+  const LINK_LABEL = { legal: "Rejoindre le Discord légal", illegal: "Rejoindre le Discord illégal" };
+  const discordButton = (key) =>
+    links[key] ? `<a class="rules-discord" href="${escapeHtml(links[key])}" target="_blank" rel="noreferrer">${LINK_LABEL[key]}</a>` : "";
 
   let me = null;
   let rules = { sections: [], categories: [] };
@@ -20,41 +24,9 @@
   let editingId = null;
   let draftSection = null;
 
-  const IMG = (id, extra = "") =>
-    `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=1200&q=80${extra}`;
-
-  const THEME_GROUPS = [
-    {
-      id: "global",
-      label: "Règlement global",
-      cards: [
-        { id: "discord", label: "Règlement Discord", cat: "discord", image: IMG("1516321318423-f06f85e504b3") },
-        { id: "general", label: "Règlement du serveur", cat: "general", image: IMG("1480714378408-67cf0d13bc1b") },
-        { id: "rp", label: "RP & Vocal", cat: "rp", image: IMG("1507003211169-0a1dd7228f2d") },
-        { id: "staff", label: "Interdictions & staff", cat: "staff", image: IMG("1560250097-0b93528c311a") },
-        { id: "boutique", label: "Boutique", cat: "boutique", image: IMG("1544636331-e26879cd4d9b") },
-      ],
-    },
-    {
-      id: "illegal",
-      label: "Règlement illégal",
-      cards: [
-        { id: "illegal", label: "Illégal", cat: "illegal", sub: "general-illegal", image: IMG("1514565131-fce0801e5785") },
-        { id: "orgas", label: "Organisations", cat: "illegal", sub: "orgas", image: IMG("1529156069898-49953e39b3ac") },
-        { id: "braquages", label: "Braquages", cat: "illegal", sub: "braquages", image: IMG("1556742049-0cfed4f6a45d") },
-      ],
-    },
-    {
-      id: "legal",
-      label: "Règlement légal",
-      cards: [
-        { id: "services", label: "Services publics", cat: "legal", sub: "services", image: IMG("1540962351504-03099e0a754b") },
-        { id: "gouvernement", label: "Gouvernement", cat: "legal", sub: "gouvernement", image: IMG("1600596542815-ffad4c1539a9") },
-        { id: "justice", label: "Justice & DOJ", cat: "legal", sub: "justice", image: IMG("1589829545856-d10d557cf95f") },
-        { id: "ems", label: "EMS", cat: "legal", sub: "ems", image: IMG("1516549655169-df83a0774514") },
-      ],
-    },
-  ];
+  // Thèmes en photo et liens Discord : réglés dans le panel admin
+  let THEME_GROUPS = [];
+  let links = {};
 
   const allCards = () => THEME_GROUPS.flatMap((group) => group.cards);
 
@@ -199,6 +171,11 @@
     if (rulesTitle) rulesTitle.innerHTML = `<em>Thème</em> ${escapeHtml(label)}`;
     if (rulesLead) rulesLead.hidden = true;
     if (chapterLead) chapterLead.textContent = label;
+    if (chapterDiscord) {
+      chapterDiscord.hidden = !links[activeCat];
+      chapterDiscord.href = links[activeCat] || "#";
+      chapterDiscord.textContent = LINK_LABEL[activeCat] || "";
+    }
   }
 
   function cardCount(card) {
@@ -221,8 +198,9 @@
           </button>`;
         })
         .join("");
+      const linkKey = ["legal", "illegal"].find((key) => group.cards.length && group.cards.every((c) => c.cat === key));
       return `<section class="rules-theme">
-        <h2>${escapeHtml(group.label)}</h2>
+        <div class="rules-theme-head"><h2>${escapeHtml(group.label)}</h2>${linkKey ? discordButton(linkKey) : ""}</div>
         <div class="rules-cards">${cards}</div>
       </section>`;
     }).join("");
@@ -508,6 +486,8 @@
     await window.Staff.load();
     me = window.Staff.me;
     rules = await api("/api/reglement");
+    THEME_GROUPS = rules.themes || [];
+    links = rules.links || {};
     const next = readHash();
     activeCat = next.cat;
     activeSub = next.sub;

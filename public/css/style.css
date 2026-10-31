@@ -1872,3 +1872,7 @@ body.casier-open {
   color: var(--text);
   font-size: 0.92rem;
 }
+
+a.text-btn {
+  text-decoration: none;
+}

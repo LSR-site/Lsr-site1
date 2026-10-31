@@ -78,11 +78,11 @@ const byNumberDesc = (a, b) => Number(b.number) - Number(a.number);
 
 // ---------- Config ----------
 
-const ALL_PERMS = ["site", "reglement", "team", "tickets"];
+const ALL_PERMS = ["panel", "site", "reglement", "team", "tickets"];
 const STAFF_GRADES = [
   ["fondateur", "Fondateur", "FONDATEUR", ["all"]],
   ["fondatrice", "Fondatrice", "FONDATRICE", ["all"]],
-  ["admin", "Administrateur", "ADMIN", ["tickets"]],
+  ["admin", "Administrateur", "ADMIN", ["panel", "site", "reglement", "team", "tickets"]],
   ["modo", "Modérateur", "MODO", ["tickets"]],
   ["helper", "Helper", "HELPER", ["tickets"]],
 ].map(([id, label, key, perms]) => ({ id, label, envKey: `STAFF_PASSWORD_${key}`, perms }));
@@ -97,6 +97,32 @@ const RULE_TREE = [
   { id: "discord", label: "Discord", subs: sub([["salons", "Salons"], ["vocal-discord", "Vocal Discord"]]) },
   { id: "staff", label: "Staff", subs: sub([["sanctions", "Sanctions"], ["tickets-staff", "Tickets"]]) },
 ].map((cat) => ({ ...cat, subs: [...cat.subs, { id: "autre", label: "Autre" }] }));
+
+// Thèmes en photo de la page Règlement (modifiables dans le panel)
+const IMG = (id) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=1200&q=80`;
+const card = (label, cat, sub, image) => ({ id: uid(), label, cat, sub: sub || "", image });
+const DEFAULT_THEMES = () => [
+  { id: "global", label: "Règlement global", cards: [
+    card("Règlement Discord", "discord", "", IMG("1516321318423-f06f85e504b3")),
+    card("Règlement du serveur", "general", "", IMG("1480714378408-67cf0d13bc1b")),
+    card("RP & Vocal", "rp", "", IMG("1507003211169-0a1dd7228f2d")),
+    card("Interdictions & staff", "staff", "", IMG("1560250097-0b93528c311a")),
+    card("Boutique", "boutique", "", IMG("1544636331-e26879cd4d9b")),
+  ] },
+  { id: "illegal", label: "Règlement illégal", cards: [
+    card("Illégal", "illegal", "general-illegal", IMG("1514565131-fce0801e5785")),
+    card("Organisations", "illegal", "orgas", IMG("1529156069898-49953e39b3ac")),
+    card("Braquages", "illegal", "braquages", IMG("1556742049-0cfed4f6a45d")),
+  ] },
+  { id: "legal", label: "Règlement légal", cards: [
+    card("Services publics", "legal", "services", IMG("1540962351504-03099e0a754b")),
+    card("Gouvernement", "legal", "gouvernement", IMG("1600596542815-ffad4c1539a9")),
+    card("Justice & DOJ", "legal", "justice", IMG("1589829545856-d10d557cf95f")),
+    card("EMS", "legal", "ems", IMG("1516549655169-df83a0774514")),
+  ] },
+];
+// Onglets du menu (nom et visibilité modifiables dans le panel)
+const TABS = [["/", "Accueil"], ["/tickets", "Tickets"], ["/whitelist", "Whitelist"], ["/casiers", "Casiers"], ["/reglement", "Règlement"]];
 
 const TICKET_CATEGORIES = [
   ["support", "general", "🛠️", "Support", "Besoin d'aide ou petit problème IG"],
@@ -398,7 +424,10 @@ app.post("/api/staff/logout", (req, res) => {
 });
 
 // Règlement
-app.get("/api/reglement", async (_req, res) => res.json(await readRules()));
+app.get("/api/reglement", async (_req, res) => {
+  const [rules, site] = await Promise.all([readRules(), readSite()]);
+  res.json({ ...rules, themes: site.themes, links: site.links });
+});
 
 app.post(["/api/reglement/section", "/api/reglement/section/:action"], async (req, res) => {
   if (!requirePerm(req, res, "reglement")) return;
@@ -461,7 +490,28 @@ app.post("/api/discord/annonce", async (req, res) => {
 
 // Textes du site (mode édition fondateur)
 const DISCORD_DEFAULT = "https://discord.gg/bNDKVDSaz";
-const readSite = async () => ({ texts: {}, discord: DISCORD_DEFAULT, ...(await readJson("site", {})) });
+async function readSite() {
+  const site = { texts: {}, discord: DISCORD_DEFAULT, links: {}, tabs: {}, ...(await readJson("site", {})) };
+  if (!Array.isArray(site.themes) || !site.themes.length) site.themes = DEFAULT_THEMES();
+  return site;
+}
+
+function cleanThemes(groups) {
+  return (Array.isArray(groups) ? groups : []).slice(0, 8).map((g) => ({
+    id: String(g.id || uid()).slice(0, 60),
+    label: text(g.label, 60) || "Thème",
+    cards: (Array.isArray(g.cards) ? g.cards : []).slice(0, 16).map((c) => {
+      const cat = RULE_TREE.find((x) => x.id === c.cat) || RULE_TREE[0];
+      return {
+        id: String(c.id || uid()).slice(0, 60),
+        label: text(c.label, 60) || cat.label,
+        cat: cat.id,
+        sub: cat.subs.some((x) => x.id === c.sub) ? c.sub : "",
+        image: httpsUrl(c.image),
+      };
+    }),
+  }));
+}
 
 app.post("/api/site", async (req, res) => {
   if (!requirePerm(req, res, "site")) return;
@@ -474,7 +524,59 @@ app.post("/api/site", async (req, res) => {
     if (!url) return res.status(400).json({ error: "Le lien Discord doit commencer par https://" });
     site.discord = url;
   }
+  if (req.body?.links) {
+    for (const key of ["legal", "illegal"]) {
+      const value = String(req.body.links[key] ?? site.links[key] ?? "").trim();
+      if (value && !httpsUrl(value)) return res.status(400).json({ error: "Les liens Discord doivent commencer par https://" });
+      site.links[key] = httpsUrl(value);
+    }
+  }
+  if (req.body?.tabs) {
+    site.tabs = Object.fromEntries(TABS.map(([route, label]) => {
+      const tab = req.body.tabs[route] || {};
+      return [route, { label: text(tab.label, 30) || label, visible: route === "/" || tab.visible !== false }];
+    }));
+  }
+  if (req.body?.themes) site.themes = cleanThemes(req.body.themes);
   res.json(await writeJson("site", site));
+});
+
+// Panel admin : tout ce qu'il faut pour l'afficher
+function editableTexts(site) {
+  const pages = { _layout: "Toutes les pages", index: "Accueil", tickets: "Tickets", whitelist: "Whitelist", casiers: "Casiers", reglement: "Règlement" };
+  return Object.entries(pages).flatMap(([file, page]) =>
+    [...HTML[file === "_layout" ? "layout" : file].matchAll(/<(\w+)\b[^>]*\bdata-edit="([\w.-]+)"[^>]*>([\s\S]*?)<\/\1>/g)].map(([, , key, inner]) => ({
+      key,
+      page,
+      original: inner.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(),
+      value: site.texts[key] || "",
+    }))
+  );
+}
+
+app.get("/api/admin", async (req, res) => {
+  if (!requirePerm(req, res, "panel")) return;
+  const [site, tickets, wl, casiers, home] = await Promise.all([readSite(), readList("tickets"), readList("whitelist"), readList("casiers"), readHome()]);
+  res.json({
+    site,
+    texts: editableTexts(site),
+    tabs: TABS.map(([route, label]) => ({ route, label: site.tabs[route]?.label || label, original: label, visible: site.tabs[route]?.visible !== false })),
+    categories: RULE_TREE,
+    botWarning: await botStatus(),
+    stats: {
+      tickets: tickets.items.length,
+      ticketsDiscord: tickets.items.filter((t) => t.discordUserId).length,
+      wlPending: wl.items.filter((i) => i.status === "pending").length,
+      wlVocal: wl.items.filter((i) => i.status === "casier").length,
+      wlAccepted: wl.items.filter((i) => i.status === "accepted").length,
+      casiers: casiers.items.length,
+      team: home.team.length,
+    },
+    tickets: tickets.items.sort(byNumberDesc).map((t) => ({
+      id: t.id, number: t.number, subject: t.subject, authorName: t.authorName, categoryLabel: ticketLabel(t.category),
+      origin: t.discordUserId ? "Discord" : "Site", messages: (t.messages || []).length, linked: Boolean(t.channelId), createdAt: t.createdAt,
+    })),
+  });
 });
 
 // Tickets
@@ -687,6 +789,7 @@ const HTML = {
   whitelist: read(new URL("./pages/whitelist.html", import.meta.url)),
   casiers: read(new URL("./pages/casiers.html", import.meta.url)),
   reglement: read(new URL("./pages/reglement.html", import.meta.url)),
+  admin: read(new URL("./pages/admin.html", import.meta.url)),
 };
 const FONTS = "family=Cinzel:wght@600;700&family=Outfit";
 const PAGES = {
@@ -720,12 +823,26 @@ async function render(route, page) {
     .replace(/(<(\w+)\b[^>]*\bdata-edit="([\w.-]+)"[^>]*>)[\s\S]*?(<\/\2>)/g, (all, open, _tag, key, close) =>
       site.texts[key] ? open + esc(site.texts[key]) + close : all
     )
-    .replaceAll(DISCORD_DEFAULT, esc(site.discord));
+    .replaceAll(DISCORD_DEFAULT, esc(site.discord))
+    // Onglets : nom et visibilité choisis dans le panel
+    .replace(/<nav class="site-nav"[\s\S]*?<\/nav>/, (nav) =>
+      nav.replace(/(<a\b([^>]*)href="(\/[a-z]*)"([^>]*))>([^<]*)<\/a>/g, (all, open, _a, href, _b, label) => {
+        const tab = site.tabs[href];
+        if (!tab) return all;
+        const hide = tab.visible === false && !open.includes(" hidden");
+        return `${open}${hide ? " hidden" : ""}>${esc(tab.label || label)}</a>`;
+      })
+    )
+    // Boutons Discord légal / illégal : affichés seulement si le lien est rempli dans le panel
+    .replace(/<a\b([^>]*)data-link="(legal|illegal)"([^>]*)>/g, (all, before, key, after) =>
+      site.links?.[key] ? `<a${before}data-link="${key}"${after.replace(' href="#"', ` href="${esc(site.links[key])}"`).replace(" hidden", "")}>` : all
+    );
 }
 
 for (const [route, page] of Object.entries(PAGES)) {
   app.get([route, `${route === "/" ? "/index" : route}.html`], async (_req, res) => res.type("html").send(await render(route, page)));
 }
+app.get(["/admin", "/admin.html"], (_req, res) => res.type("html").send(HTML.admin));
 app.get(["/wl", "/boutique"], (req, res) => res.redirect(req.path === "/wl" ? "/whitelist" : "/"));
 
 // Erreur imprévue (ex. Supabase injoignable) : réponse propre au lieu d'un plantage
