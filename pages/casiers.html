@@ -15,7 +15,23 @@
 
       <div id="casierDesk">
         <div class="casier-toolbar">
-          <input id="casierSearch" class="search" type="search" placeholder="Chercher un nom RP ou un Discord…" />
+          <input id="casierSearch" class="search" type="search" placeholder="Chercher un nom RP, un Discord ou un mot dans les notes…" />
+          <div class="casier-filters">
+            <div class="filter-chips" id="casierKinds"></div>
+            <select id="casierStatus" class="search" aria-label="Statut WL">
+              <option value="">Tous les statuts WL</option>
+              <option value="pending">Demande</option>
+              <option value="casier">En attente de vocal</option>
+              <option value="accepted">WL ok</option>
+              <option value="refused">Refusée</option>
+              <option value="none">Sans WL liée</option>
+            </select>
+            <select id="casierSort" class="search" aria-label="Trier">
+              <option value="recent">Dernière activité</option>
+              <option value="number">Numéro de casier</option>
+              <option value="sanctions">Plus de sanctions</option>
+            </select>
+          </div>
         </div>
         <div id="casierList" class="casier-grid"></div>
       </div>

@@ -2,16 +2,28 @@
   --bg: #070709;
   --bg-2: #101014;
   --surface: rgba(18, 18, 22, 0.72);
-  --line: rgba(255, 159, 0, 0.18);
+  --line: color-mix(in srgb, var(--gold) 18%, transparent);
   --gold: #FF9F00;
   --gold-2: #e08c00;
-  --gold-dim: rgba(255, 159, 0, 0.12);
+  --gold-light: #ffb52e;
+  --gold-deep: #9a5a00;
+  --gold-dim: color-mix(in srgb, var(--gold) 12%, transparent);
   --red: #c41e3a;
   --text: #f4f1e8;
   --muted: #9a9588;
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
   --radius: 18px;
 }
+
+/* Thèmes de couleur (choisis dans le panel admin) */
+[data-theme="or"] { --gold: #FF9F00; --gold-2: #e08c00; --gold-light: #ffb52e; --gold-deep: #9a5a00; }
+[data-theme="bleu"] { --gold: #3b9cff; --gold-2: #1f7ae0; --gold-light: #7cc0ff; --gold-deep: #0d4a8a; --line: color-mix(in srgb, #3b9cff 18%, transparent); --gold-dim: color-mix(in srgb, #3b9cff 12%, transparent); }
+[data-theme="rouge"] { --gold: #ff3b4e; --gold-2: #d92436; --gold-light: #ff7a86; --gold-deep: #8a0f1c; --line: color-mix(in srgb, #ff3b4e 18%, transparent); --gold-dim: color-mix(in srgb, #ff3b4e 12%, transparent); }
+[data-theme="vert"] { --gold: #22c55e; --gold-2: #16a34a; --gold-light: #6ee7a0; --gold-deep: #0f6b34; --line: color-mix(in srgb, #22c55e 18%, transparent); --gold-dim: color-mix(in srgb, #22c55e 12%, transparent); }
+[data-theme="violet"] { --gold: #a855f7; --gold-2: #8b3fe0; --gold-light: #c99bff; --gold-deep: #5b2196; --line: color-mix(in srgb, #a855f7 18%, transparent); --gold-dim: color-mix(in srgb, #a855f7 12%, transparent); }
+[data-theme="rose"] { --gold: #ff4fa3; --gold-2: #e0328a; --gold-light: #ff8cc6; --gold-deep: #8a1452; --line: color-mix(in srgb, #ff4fa3 18%, transparent); --gold-dim: color-mix(in srgb, #ff4fa3 12%, transparent); }
+[data-theme="cyan"] { --gold: #22d3ee; --gold-2: #0eb4cf; --gold-light: #7ee8f7; --gold-deep: #0b6b7d; --line: color-mix(in srgb, #22d3ee 18%, transparent); --gold-dim: color-mix(in srgb, #22d3ee 12%, transparent); }
+[data-theme="argent"] { --gold: #d9dde3; --gold-2: #b5bcc6; --gold-light: #f2f4f7; --gold-deep: #5f6670; --line: color-mix(in srgb, #d9dde3 18%, transparent); --gold-dim: color-mix(in srgb, #d9dde3 12%, transparent); }
 
 *,
 *::before,
@@ -70,7 +82,7 @@ button,
   height: 55vw;
   right: -18vw;
   top: -18vw;
-  background: radial-gradient(circle, rgba(255, 159, 0, 0.14), transparent 62%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--gold) 14%, transparent), transparent 62%);
   z-index: 0;
 }
 
@@ -123,7 +135,7 @@ button,
 }
 
 .site-nav {
-  border-top: 1px solid rgba(255, 159, 0, 0.1);
+  border-top: 1px solid color-mix(in srgb, var(--gold) 10%, transparent);
   background: rgba(10, 10, 14, 0.94);
 }
 
@@ -333,7 +345,7 @@ button,
 
 .card:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 159, 0, 0.45);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
 }
 
 .card h3 {
@@ -514,7 +526,7 @@ button,
 
 .grade-cofondateur {
   color: #f3e2a6;
-  border-color: rgba(255, 159, 0, 0.45);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
 }
 
 .grade-admin {
@@ -802,7 +814,7 @@ button,
   position: absolute;
   left: 50%;
   width: 2px;
-  background: rgba(255, 159, 0, 0.45);
+  background: color-mix(in srgb, var(--gold) 45%, transparent);
   transform: translateX(-50%);
 }
 
@@ -842,7 +854,7 @@ button,
   top: 0;
   width: 50%;
   height: 26px;
-  border-top: 2px solid rgba(255, 159, 0, 0.45);
+  border-top: 2px solid color-mix(in srgb, var(--gold) 45%, transparent);
 }
 
 .org-node::before {
@@ -852,7 +864,7 @@ button,
 .org-node::after {
   left: 50%;
   margin-left: -1px;
-  border-left: 2px solid rgba(255, 159, 0, 0.45);
+  border-left: 2px solid color-mix(in srgb, var(--gold) 45%, transparent);
 }
 
 .org-node:first-child::before,
@@ -865,7 +877,7 @@ button,
 }
 
 .org-node:last-child::before {
-  border-right: 2px solid rgba(255, 159, 0, 0.45);
+  border-right: 2px solid color-mix(in srgb, var(--gold) 45%, transparent);
   border-top-right-radius: 12px;
   margin-right: -1px;
 }
@@ -899,7 +911,7 @@ button,
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 159, 0, 0.45);
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
   background: var(--gold-dim);
   color: var(--gold);
   font-family: "Cinzel", serif;
@@ -1124,7 +1136,7 @@ button,
 .ticket-empty-logo {
   width: 92px;
   height: auto;
-  filter: drop-shadow(0 10px 24px rgba(255, 159, 0, 0.25));
+  filter: drop-shadow(0 10px 24px color-mix(in srgb, var(--gold) 25%, transparent));
 }
 
 .ticket-empty h2 {
@@ -1157,7 +1169,7 @@ button,
   padding: 18px;
   min-height: 360px;
   background:
-    radial-gradient(circle at top right, rgba(255, 159, 0, 0.06), transparent 32%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--gold) 6%, transparent), transparent 32%),
     #09090c;
 }
 
@@ -1210,8 +1222,8 @@ button,
 }
 
 .ticket-msg-staff .ticket-bubble {
-  border-color: rgba(255, 159, 0, 0.35);
-  background: rgba(255, 159, 0, 0.08);
+  border-color: color-mix(in srgb, var(--gold) 35%, transparent);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
 }
 
 .ticket-photo {
@@ -1385,7 +1397,7 @@ body.casier-open {
   display: flex;
   flex-direction: column;
   background: #0c0c10;
-  border: 1px solid rgba(255, 159, 0, 0.35);
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
   border-radius: 20px;
   box-shadow: var(--shadow);
 }
@@ -1588,8 +1600,8 @@ body.casier-open {
 }
 
 .casier-note-concern {
-  border-left-color: #e08c00;
-  background: rgba(224, 140, 0, 0.08);
+  border-left-color: var(--gold-2);
+  background: color-mix(in srgb, var(--gold-2) 8%, transparent);
 }
 
 .casier-note-concern header strong {
@@ -1627,7 +1639,66 @@ body.casier-open {
 }
 
 .casier-toolbar {
+  display: grid;
+  gap: 12px;
   margin: 8px 0 16px;
+}
+
+.casier-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.casier-filters select.search {
+  width: auto;
+  min-width: 190px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font: 600 0.88rem "Outfit", sans-serif;
+  cursor: pointer;
+}
+
+.filter-chip b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.filter-chip:hover {
+  color: var(--text);
+}
+
+.filter-chip.active {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+  color: var(--gold);
+}
+
+.casier-note-tabs {
+  flex: 0 0 auto;
+  margin: 10px 0 12px;
+}
+
+.casier-note-tabs .filter-chip {
+  padding: 5px 11px;
+  font-size: 0.8rem;
 }
 
 .casier-grid {
@@ -1644,7 +1715,7 @@ body.casier-open {
   position: relative;
   min-height: 268px;
   background:
-    linear-gradient(180deg, rgba(255, 159, 0, 0.06), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--gold) 6%, transparent), transparent 42%),
     #101014;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -1683,7 +1754,7 @@ body.casier-open {
   place-items: center;
   margin: 4px 0 2px;
   background: var(--gold-dim);
-  border: 1px solid rgba(255, 159, 0, 0.35);
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
   color: var(--gold);
   font-family: "Cinzel", serif;
   font-weight: 700;
@@ -1727,7 +1798,7 @@ body.casier-open {
 
 .casier-pill-warn {
   color: #e0b36a;
-  background: rgba(224, 140, 0, 0.16);
+  background: color-mix(in srgb, var(--gold-2) 16%, transparent);
 }
 
 .casier-pill-bad {
@@ -1866,7 +1937,7 @@ body.casier-open {
   z-index: 2;
   margin: 18px 0 0;
   padding: 12px 16px;
-  border: 1px solid rgba(255, 159, 0, 0.55);
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
   border-radius: 14px;
   background: var(--gold-dim);
   color: var(--text);
@@ -1875,4 +1946,213 @@ body.casier-open {
 
 a.text-btn {
   text-decoration: none;
+}
+
+/* ---------- Accueil : photo choisie dans le panel ---------- */
+.home-hero:has(.home-photo:not([hidden])) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: center;
+  gap: 40px;
+}
+
+.home-photo {
+  position: relative;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: var(--shadow), 0 0 60px var(--gold-dim);
+}
+
+.home-photo img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.home-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 55%, rgba(7, 7, 9, 0.55));
+  pointer-events: none;
+}
+
+/* ---------- Accueil : calendrier de la semaine ---------- */
+.agenda-section {
+  position: relative;
+  z-index: 1;
+  padding: 28px 0 20px;
+}
+
+.agenda-section h2 {
+  font-family: "Cinzel", serif;
+  font-size: clamp(1.6rem, 3.4vw, 2.3rem);
+}
+
+.agenda {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.agenda-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.agenda-nav strong {
+  font-family: "Cinzel", serif;
+  font-size: 1.05rem;
+}
+
+.agenda-nav #agendaPrev,
+.agenda-nav #agendaNext {
+  min-width: 40px;
+  padding: 6px 12px;
+  font-size: 1.1rem;
+}
+
+.agenda-nav #agendaToday {
+  margin-left: auto;
+}
+
+.agenda-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.agenda-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 150px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.agenda-day header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.agenda-day header b {
+  color: var(--text);
+  font-size: 1.15rem;
+  letter-spacing: 0;
+}
+
+.agenda-day.has {
+  border-color: var(--line);
+}
+
+.agenda-day.today {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+}
+
+.agenda-day.today header,
+.agenda-day.today header b {
+  color: var(--gold);
+}
+
+.agenda-empty {
+  margin: auto 0;
+  color: var(--muted);
+  opacity: 0.4;
+  text-align: center;
+}
+
+.agenda-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.agenda-item time {
+  color: var(--gold);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.agenda-item span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.agenda-item p {
+  font-size: 0.8rem;
+}
+
+@media (max-width: 980px) {
+  .home-hero:has(.home-photo:not([hidden])) {
+    grid-template-columns: 1fr;
+  }
+
+  .agenda-week {
+    grid-template-columns: 1fr;
+  }
+
+  .agenda-day {
+    min-height: 0;
+  }
+
+  .agenda-day:not(.has):not(.today) .agenda-empty {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .agenda-nav {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .agenda-nav strong {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 0.92rem;
+    text-align: center;
+  }
+
+  .agenda-nav #agendaNext {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .agenda-nav #agendaToday {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+}
+
+/* Petits téléphones : le nom à côté du logo laisse la place aux boutons */
+@media (max-width: 440px) {
+  .brand span {
+    display: none;
+  }
+
+  .header-actions {
+    gap: 8px;
+  }
 }

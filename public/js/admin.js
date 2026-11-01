@@ -95,6 +95,59 @@
         <div class="admin-list">${rows}</div>`;
     },
 
+    home() {
+      const photo = data.site.homePhoto || "";
+      const eventRow = (e) => `<article class="admin-event" data-id="${escapeHtml(e.id)}">
+          <div class="admin-inline">
+            <input class="admin-input f-date" type="date" value="${escapeHtml(e.date)}" required>
+            <input class="admin-input f-time" type="time" value="${escapeHtml(e.time)}">
+            <input class="admin-input f-company" value="${escapeHtml(e.company)}" maxlength="60" placeholder="Entreprise (ex. Bahama Mamas)">
+          </div>
+          <input class="admin-input f-title" value="${escapeHtml(e.title)}" maxlength="80" placeholder="Titre de l’événement">
+          <div class="admin-inline">
+            <input class="admin-input f-place" value="${escapeHtml(e.place)}" maxlength="80" placeholder="Lieu (facultatif)">
+            <input class="admin-input f-desc" value="${escapeHtml(e.description)}" maxlength="400" placeholder="Petite description (facultatif)">
+          </div>
+          <button class="admin-btn danger remove-event" type="button">Supprimer</button>
+        </article>`;
+      SECTIONS.home.eventRow = eventRow;
+      return `${head("Accueil", "La photo en haut de l’accueil et le calendrier des événements entreprises.")}
+        <h2 class="admin-subtitle">Photo de l’accueil</h2>
+        <div class="admin-photo">
+          <div class="admin-photo-preview" id="photoPreview" style="${photo ? `background-image:url('${escapeHtml(photo)}')` : ""}">${photo ? "" : "<span>Aucune photo</span>"}</div>
+          <div class="admin-photo-actions">
+            <label class="admin-add admin-file">Choisir une photo sur mon PC<input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp" hidden></label>
+            <label>ou colle un lien d’image (https://…)
+              <span class="admin-inline"><input class="admin-input" id="photoUrl" value="${photo.startsWith("https") ? escapeHtml(photo) : ""}" placeholder="https://…"><button class="admin-btn" type="button" id="photoUrlSave">Utiliser ce lien</button></span>
+            </label>
+            ${photo ? `<button class="admin-btn danger" type="button" id="photoRemove">Retirer la photo</button>` : ""}
+          </div>
+        </div>
+        <div class="admin-subhead">
+          <h2 class="admin-subtitle">Événements entreprises</h2>
+          <div class="admin-row-actions">
+            <button class="admin-btn" type="button" id="addEvent">+ Ajouter un événement</button>
+            <button class="admin-add" type="button" id="saveEvents">Enregistrer les événements</button>
+          </div>
+        </div>
+        <p class="muted admin-help">Ils s’affichent dans le calendrier de la semaine sur l’accueil (avec des flèches pour passer d’une semaine à l’autre).</p>
+        <div id="eventList" class="admin-list">${data.events.map(eventRow).join("") || ""}</div>`;
+    },
+
+    look() {
+      const current = data.site.theme || "or";
+      return `${head("Apparence du site", "Choisis la couleur principale du site. Elle s’applique à toutes les pages et au panel.")}
+        <div class="admin-themes">${data.colorThemes
+          .map(
+            (t) => `<button class="admin-theme${t.id === current ? " active" : ""}" type="button" data-theme-id="${t.id}">
+              <span class="admin-theme-swatch" data-theme="${t.id}"><i></i><i></i><i></i></span>
+              <strong>${escapeHtml(t.label)}</strong>
+              <span>${t.id === current ? "Thème actuel" : "Appliquer"}</span>
+            </button>`
+          )
+          .join("")}</div>`;
+    },
+
     rules() {
       const cats = data.categories;
       const subOptions = (cat, sub) =>
@@ -144,8 +197,8 @@
       return `${head("Liens Discord", "Les liens d’invitation affichés sur le site.", `<button class="admin-add" type="button" id="saveLinks">Enregistrer</button>`)}
         <div class="admin-list">
           ${field("linkMain", "Discord principal", data.site.discord, "Boutons « Discord » en haut de chaque page, sur l’accueil et en bas du règlement.")}
-          ${field("linkLegal", "Discord légal", data.site.links.legal, "Bouton « Discord légal » sur l’accueil et dans le règlement légal. Laisse vide pour le cacher.")}
-          ${field("linkIllegal", "Discord illégal", data.site.links.illegal, "Bouton « Discord illégal » sur l’accueil et dans le règlement illégal. Laisse vide pour le cacher.")}
+          ${field("linkLegal", "Discord légal", data.site.links.legal, "Bouton « Discord légal » dans le règlement légal. Laisse vide pour le cacher.")}
+          ${field("linkIllegal", "Discord illégal", data.site.links.illegal, "Bouton « Discord illégal » dans le règlement illégal. Laisse vide pour le cacher.")}
         </div>
         <p class="muted admin-help">Pour un lien qui n’expire pas : sur Discord, clic droit sur le serveur → Inviter des gens → Modifier le lien → Expiration : Jamais.</p>`;
     },
@@ -197,8 +250,75 @@
     },
   };
 
+  // Photo réduite dans le navigateur avant l'envoi (plus léger et plus rapide)
+  const shrink = (file) =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 1920 / img.width);
+        const canvas = Object.assign(document.createElement("canvas"), { width: Math.round(img.width * scale), height: Math.round(img.height * scale) });
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(img.src);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = () => reject(new Error("Image illisible."));
+      img.src = URL.createObjectURL(file);
+    });
+
   // ---------- Actions de chaque section ----------
   const BIND = {
+    home() {
+      $("#photoFile").onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        try {
+          toast("Envoi de la photo…");
+          data.site = await api("/api/home/photo", { method: "POST", body: JSON.stringify({ image: await shrink(file) }) });
+          toast("Photo de l’accueil mise à jour ✔");
+          render();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+      $("#photoUrlSave").onclick = async () => (await save({ homePhoto: $("#photoUrl").value.trim() }, "Photo de l’accueil mise à jour ✔")) && render();
+      if ($("#photoRemove")) $("#photoRemove").onclick = async () => (await save({ homePhoto: "" }, "Photo retirée")) && render();
+      const wire = (root) => root.querySelectorAll(".remove-event").forEach((b) => (b.onclick = () => b.closest(".admin-event").remove()));
+      wire(main);
+      $("#addEvent").onclick = () => {
+        $("#eventList").insertAdjacentHTML("afterbegin", SECTIONS.home.eventRow({ id: crypto.randomUUID(), date: new Date().toISOString().slice(0, 10), time: "", title: "", company: "", place: "", description: "" }));
+        wire($("#eventList").firstElementChild);
+        $("#eventList .f-title").focus();
+      };
+      $("#saveEvents").onclick = async () => {
+        const items = [...main.querySelectorAll(".admin-event")].map((row) => ({
+          id: row.dataset.id,
+          date: row.querySelector(".f-date").value,
+          time: row.querySelector(".f-time").value,
+          title: row.querySelector(".f-title").value,
+          company: row.querySelector(".f-company").value,
+          place: row.querySelector(".f-place").value,
+          description: row.querySelector(".f-desc").value,
+        }));
+        try {
+          data.events = (await api("/api/events", { method: "POST", body: JSON.stringify({ items }) })).items;
+          toast("Événements enregistrés ✔");
+          render();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+    },
+
+    look() {
+      main.querySelectorAll("[data-theme-id]").forEach((b) => (b.onclick = async () => {
+        const theme = b.dataset.themeId;
+        if (await save({ theme }, "Thème appliqué à tout le site ✔")) {
+          theme === "or" ? delete document.documentElement.dataset.theme : (document.documentElement.dataset.theme = theme);
+          render();
+        }
+      }));
+    },
+
     tabs() {
       main.querySelectorAll(".toggle").forEach((b) => (b.onclick = () => {
         const on = b.dataset.visible !== "true";

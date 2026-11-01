@@ -9,13 +9,36 @@
 
   let items = [];
   let query = "";
+  let kind = "all";
+
+  // Filtres : type de casier, statut WL, tri
+  const KINDS = {
+    all: ["Tous", () => true],
+    sanction: ["Avec sanctions", (i) => i.sanctionCount > 0],
+    concern: ["Points dérangeants", (i) => i.concernCount > 0],
+    clean: ["Propres", (i) => !i.sanctionCount && !i.concernCount],
+  };
+  const SORTS = {
+    recent: (a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")),
+    number: (a, b) => b.number - a.number,
+    sanctions: (a, b) => b.sanctionCount - a.sanctionCount || b.concernCount - a.concernCount,
+  };
+
+  function renderChips() {
+    $("#casierKinds").innerHTML = Object.entries(KINDS)
+      .map(([id, [label, test]]) => `<button class="filter-chip${id === kind ? " active" : ""}" type="button" data-kind="${id}">${label} <b>${items.filter(test).length}</b></button>`)
+      .join("");
+  }
 
   function render() {
+    renderChips();
     const q = query.trim().toLowerCase();
-    const list = items.filter((item) => {
-      if (!q) return true;
-      return `${item.name} ${item.discord} ${item.number}`.toLowerCase().includes(q);
-    });
+    const status = $("#casierStatus").value;
+    const list = items
+      .filter(KINDS[kind][1])
+      .filter((item) => !status || (status === "none" ? !item.whitelist : item.whitelist?.status === status))
+      .filter((item) => !q || `${item.name} ${item.discord} ${item.number} ${(item.notes || []).map((n) => n.text).join(" ")}`.toLowerCase().includes(q))
+      .sort(SORTS[$("#casierSort").value] || SORTS.recent);
     $("#casierList").innerHTML = list.length
       ? list
           .map((item) => {
@@ -41,7 +64,7 @@
         </article>`;
           })
           .join("")
-      : `<p class="muted casier-empty">Aucun casier dans ce tableau.</p>`;
+      : `<p class="muted casier-empty">${items.length ? "Aucun casier ne correspond à ces filtres." : "Aucun casier dans ce tableau."}</p>`;
   }
 
   async function load() {
@@ -55,6 +78,14 @@
     query = event.target.value;
     render();
   });
+  $("#casierStatus").onchange = render;
+  $("#casierSort").onchange = render;
+  $("#casierKinds").onclick = (event) => {
+    const chip = event.target.closest("[data-kind]");
+    if (!chip) return;
+    kind = chip.dataset.kind;
+    render();
+  };
 
   $("#casierList")?.addEventListener("click", async (event) => {
     const del = event.target.closest("[data-delete]");
@@ -80,10 +111,10 @@
   async function init() {
     await window.Staff.load();
     window.Staff.renderAuth($("#authArea"));
-    if (!window.Staff.can("tickets") && !window.Staff.isStaff()) {
+    if (!window.Staff.can("casiers")) {
       $("#casierGate").hidden = false;
       $("#casierDesk").hidden = true;
-      $("#casierMeta").textContent = "Réservé au staff. Connecte-toi pour ouvrir les casiers.";
+      $("#casierMeta").textContent = window.Staff.isStaff() ? "Ton grade n’a pas accès aux casiers." : "Réservé au staff. Connecte-toi pour ouvrir les casiers.";
       return;
     }
     $("#casierGate").hidden = true;

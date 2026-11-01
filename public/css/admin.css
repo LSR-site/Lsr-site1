@@ -115,8 +115,8 @@
   padding: 13px 24px;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(180deg, #ffb52e, #f39200);
-  box-shadow: 0 8px 30px rgba(255, 159, 0, 0.35);
+  background: linear-gradient(180deg, var(--gold-light), var(--gold-2));
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--gold) 35%, transparent);
   color: #1a1004;
   font: 800 1rem "Outfit", sans-serif;
   text-decoration: none;
@@ -196,7 +196,7 @@
 .admin-pill.warn {
   border-color: #5a4318;
   background: #2b2010;
-  color: #ffbf55;
+  color: var(--gold-light);
 }
 
 .admin-pill.toggle {
@@ -296,8 +296,8 @@
 }
 
 .admin-alert {
-  border: 1px solid rgba(255, 159, 0, 0.55);
-  background: rgba(255, 159, 0, 0.12);
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 
 .admin-ok {
@@ -398,6 +398,131 @@
   color: #ff9d9d;
 }
 
+/* Accueil : photo + événements */
+.admin-photo {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.admin-photo-preview {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #2a231d;
+  border-radius: 14px;
+  background: #0f0d0b center / cover no-repeat;
+  color: var(--muted);
+}
+
+.admin-photo-actions {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+}
+
+.admin-photo-actions label:not(.admin-file) {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  font-weight: 600;
+}
+
+.admin-photo-actions .admin-inline {
+  grid-template-columns: 1fr auto;
+}
+
+.admin-subhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 34px;
+}
+
+.admin-subhead .admin-subtitle {
+  margin: 0;
+}
+
+.admin-subhead + .admin-help {
+  margin: 8px 0 16px;
+}
+
+.admin-event {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #2a231d;
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  background: #1a1714;
+}
+
+.admin-event > .admin-inline:first-child {
+  grid-template-columns: 170px 140px 1fr;
+}
+
+.admin-event .remove-event {
+  justify-self: end;
+}
+
+/* Apparence : choix du thème */
+.admin-themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.admin-theme {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid #2a231d;
+  border-radius: 14px;
+  background: #1a1714;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-theme:hover {
+  border-color: #4a3f33;
+}
+
+.admin-theme.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+}
+
+.admin-theme > span:last-child {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.admin-theme-swatch {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.admin-theme-swatch i {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+.admin-theme-swatch i:nth-child(2) {
+  background: var(--gold-light);
+}
+
+.admin-theme-swatch i:nth-child(3) {
+  background: var(--gold-deep);
+}
+
 @media (max-width: 820px) {
   .admin-body {
     grid-template-columns: 1fr;
@@ -408,7 +533,9 @@
     height: auto;
   }
 
-  .admin-card-row {
+  .admin-card-row,
+  .admin-photo,
+  .admin-event > .admin-inline:first-child {
     grid-template-columns: 1fr;
   }
 }

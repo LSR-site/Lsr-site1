@@ -9,9 +9,27 @@
             <a data-edit="accueil.bouton-tickets" class="btn btn-ghost" href="/tickets">Tickets</a>
             <a data-edit="accueil.bouton-equipe" class="btn btn-ghost" href="#equipe">L’équipe</a>
             <a data-edit="accueil.bouton-discord" class="btn btn-ghost" href="https://discord.gg/bNDKVDSaz" target="_blank" rel="noreferrer">Discord</a>
-            <a data-link="legal" data-edit="accueil.bouton-legal" class="btn btn-ghost" href="#" target="_blank" rel="noreferrer" hidden>Discord légal</a>
-            <a data-link="illegal" data-edit="accueil.bouton-illegal" class="btn btn-ghost" href="#" target="_blank" rel="noreferrer" hidden>Discord illégal</a>
           </div>
+        </div>
+        <figure class="home-photo" data-home-photo hidden></figure>
+      </section>
+
+      <section class="wrap agenda-section" id="agenda">
+        <div class="section-head">
+          <div>
+            <p data-edit="accueil.agenda-surtitre" class="kicker">Calendrier</p>
+            <h2 data-edit="accueil.agenda-titre">Événements des entreprises</h2>
+          </div>
+          <a class="btn btn-ghost" id="editAgenda" href="/admin#home" hidden>Gérer les événements</a>
+        </div>
+        <div class="agenda">
+          <div class="agenda-nav">
+            <button class="btn btn-ghost btn-compact" type="button" id="agendaPrev" aria-label="Semaine précédente">‹</button>
+            <strong id="agendaLabel"></strong>
+            <button class="btn btn-ghost btn-compact" type="button" id="agendaNext" aria-label="Semaine suivante">›</button>
+            <button class="btn btn-ghost btn-compact" type="button" id="agendaToday" hidden>Cette semaine</button>
+          </div>
+          <div class="agenda-week" id="agendaWeek"></div>
         </div>
       </section>
 

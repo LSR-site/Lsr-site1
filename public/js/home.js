@@ -135,10 +135,61 @@
       await window.Staff.load();
       window.Staff.renderAuth($("#authArea"));
       $("#editTeam").hidden = !window.Staff.can("team");
+      $("#editAgenda").hidden = !window.Staff.can("panel");
       home = await api("/api/home");
       renderTeam();
     } catch {
       $("#teamGrid").innerHTML = `<p class="empty">Impossible de charger l’accueil. Lance le site avec npm start.</p>`;
     }
   })();
+})();
+
+// ----- Calendrier de la semaine : événements entreprises -----
+(() => {
+  const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+  const pad = (n) => String(n).padStart(2, "0");
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const today = new Date();
+  const thisMonday = addDays(today, -((today.getDay() + 6) % 7));
+  let monday = thisMonday;
+  let events = [];
+
+  const short = (d, year) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", ...(year ? { year: "numeric" } : {}) });
+
+  function item(e) {
+    return `<article class="agenda-item">
+        ${e.time ? `<time>${escapeHtml(e.time)}</time>` : ""}
+        <strong>${escapeHtml(e.title)}</strong>
+        ${e.company || e.place ? `<span>${escapeHtml([e.company, e.place].filter(Boolean).join(" · "))}</span>` : ""}
+        ${e.description ? `<p class="muted">${escapeHtml(e.description)}</p>` : ""}
+      </article>`;
+  }
+
+  function render() {
+    const sunday = addDays(monday, 6);
+    $("#agendaLabel").textContent = `Semaine du ${short(monday, monday.getFullYear() !== sunday.getFullYear())} au ${short(sunday, true)}`;
+    $("#agendaToday").hidden = iso(monday) === iso(thisMonday);
+    $("#agendaWeek").innerHTML = DAYS.map((name, i) => {
+      const day = addDays(monday, i);
+      const list = events.filter((e) => e.date === iso(day));
+      return `<section class="agenda-day${iso(day) === iso(today) ? " today" : ""}${list.length ? " has" : ""}">
+          <header><span>${name}</span><b>${day.getDate()}</b></header>
+          ${list.map(item).join("") || `<p class="agenda-empty">—</p>`}
+        </section>`;
+    }).join("");
+  }
+
+  const move = (days) => ((monday = addDays(monday, days)), render());
+  $("#agendaPrev").onclick = () => move(-7);
+  $("#agendaNext").onclick = () => move(7);
+  $("#agendaToday").onclick = () => ((monday = thisMonday), render());
+
+  render();
+  api("/api/events")
+    .then((data) => {
+      events = data.items || [];
+      render();
+    })
+    .catch(() => {});
 })();

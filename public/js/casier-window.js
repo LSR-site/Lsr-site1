@@ -65,9 +65,21 @@
       ${block("Motivation", wl.motivation)}`;
   }
 
+  // Filtre du journal : tout, sanctions, points dérangeants…
+  let noteFilter = "all";
+  function noteTabs(list) {
+    const all = list || [];
+    return [["all", "Tout", all.length], ...Object.entries(NOTE_LABEL).map(([id, label]) => [id, label, all.filter((n) => n.kind === id).length])]
+      .filter(([id, , n]) => id === "all" || n)
+      .map(([id, label, n]) => `<button class="filter-chip${id === noteFilter ? " active" : ""}" type="button" data-note-filter="${id}">${escapeHtml(label)} <b>${n}</b></button>`)
+      .join("");
+  }
+
   function notes(list) {
     if (!list?.length) return `<p class="muted">Aucun commentaire pour l’instant. Tout ce que tu écris ici reste staff.</p>`;
-    return list
+    const shown = noteFilter === "all" ? list : list.filter((n) => n.kind === noteFilter);
+    if (!shown.length) return `<p class="muted">Rien dans cette catégorie.</p>`;
+    return shown
       .map(
         (note) => `
         <article class="casier-note casier-note-${escapeHtml(note.kind)}">
@@ -133,6 +145,7 @@
             <h3>Journal staff</h3>
             <p class="muted">Commentaires et sanctions invisibles pour le joueur. Le casier reste après la WL.</p>
           </div>
+          <div class="filter-chips casier-note-tabs">${noteTabs(casier.notes)}</div>
           <div class="casier-feed">${notes(casier.notes)}</div>
           <form id="casierNoteForm" class="casier-composer">
             <label>Type
@@ -150,6 +163,14 @@
           </form>
         </section>
       </div>`;
+    // Changer de filtre ne touche pas à la note en cours d'écriture
+    mount.querySelector(".casier-note-tabs").onclick = (event) => {
+      const b = event.target.closest("[data-note-filter]");
+      if (!b) return;
+      noteFilter = b.dataset.noteFilter;
+      mount.querySelector(".casier-note-tabs").innerHTML = noteTabs(casier.notes);
+      mount.querySelector(".casier-feed").innerHTML = notes(casier.notes);
+    };
     document.querySelector("#casierClose").onclick = () => window.CasierWindow.close();
     document.querySelector("#casierDelete").onclick = () => window.CasierWindow.remove(casier);
     document.querySelector("#casierNoteForm").onsubmit = async (event) => {
@@ -196,6 +217,7 @@
     async open(casierId) {
       if (!casierId) return;
       const box = ensure();
+      if (this.currentId !== casierId) noteFilter = "all";
       this.currentId = casierId;
       box.hidden = false;
       document.body.classList.add("casier-open");

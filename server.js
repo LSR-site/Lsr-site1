@@ -78,13 +78,15 @@ const byNumberDesc = (a, b) => Number(b.number) - Number(a.number);
 
 // ---------- Config ----------
 
-const ALL_PERMS = ["panel", "site", "reglement", "team", "tickets"];
+// Droits : panel admin, site (textes, liens, thème, accueil), règlement, équipe, tickets, demandes WL, casiers
+const ALL_PERMS = ["panel", "site", "reglement", "team", "tickets", "whitelist", "casiers"];
 const STAFF_GRADES = [
   ["fondateur", "Fondateur", "FONDATEUR", ["all"]],
   ["fondatrice", "Fondatrice", "FONDATRICE", ["all"]],
-  ["admin", "Administrateur", "ADMIN", ["panel", "site", "reglement", "team", "tickets"]],
-  ["modo", "Modérateur", "MODO", ["tickets"]],
-  ["helper", "Helper", "HELPER", ["tickets"]],
+  ["admin", "Administrateur", "ADMIN", ["panel", "site", "reglement", "team", "tickets", "whitelist", "casiers"]],
+  ["modo", "Modérateur", "MODO", ["tickets", "whitelist", "casiers", "reglement"]],
+  ["helper", "Helper", "HELPER", ["tickets", "whitelist", "casiers", "reglement"]],
+  ["recruteur", "Recruteur", "RECRUTEUR", ["whitelist", "casiers", "reglement"]],
 ].map(([id, label, key, perms]) => ({ id, label, envKey: `STAFF_PASSWORD_${key}`, perms }));
 
 const sub = (pairs) => pairs.map(([id, label]) => ({ id, label }));
@@ -161,7 +163,7 @@ function publicUser(req) {
   return {
     connected: true,
     isStaff: true,
-    canEdit: perms.includes("all") || perms.some((p) => p !== "tickets"),
+    canEdit: perms.length > 0,
     username: grade?.label || "Staff",
     grade: grade?.id || null,
     gradeLabel: grade?.label || "Staff",
@@ -402,7 +404,9 @@ for (const method of ["get", "post"]) {
     handlers.length ? original(path, ...handlers.map((h) => (req, res, next) => Promise.resolve(h(req, res, next)).catch(next))) : original(path);
 }
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "1mb" }));
+const jsonSmall = express.json({ limit: "1mb" });
+const jsonPhoto = express.json({ limit: "4mb" });
+app.use((req, res, next) => (req.path === "/api/home/photo" ? jsonPhoto : jsonSmall)(req, res, next));
 app.use(sessions);
 
 // Staff
@@ -410,7 +414,7 @@ app.get("/api/me", (req, res) => res.json(publicUser(req)));
 
 app.post("/api/staff/login", (req, res) => {
   const grade = findGrade(String(req.body?.grade || ""));
-  if (!grade) return res.status(400).json({ error: "Choisis un grade : Helper, Modérateur, Administrateur ou Fondateur." });
+  if (!grade) return res.status(400).json({ error: "Choisis ton grade staff." });
   const given = String(req.body?.password || "");
   const ok = given && (same(given, env(grade.envKey)) || (grade.id === "fondateur" && same(given, env("STAFF_PASSWORD"))));
   if (!ok) return res.status(401).json({ error: "Mot de passe staff incorrect pour ce grade." });
@@ -477,6 +481,50 @@ app.post("/api/home/sync", async (req, res) => {
   res.json(await writeHome({ levels: home.levels, team: [...kept, ...synced] }));
 });
 
+// Photo de l'accueil envoyée depuis le panel (gardée dans Supabase, servie par le site)
+app.post("/api/home/photo", async (req, res) => {
+  if (!requirePerm(req, res, "site")) return;
+  const match = String(req.body?.image || "").match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return res.status(400).json({ error: "Choisis une image JPG, PNG ou WEBP." });
+  if (match[2].length > 4_000_000) return res.status(400).json({ error: "Image trop lourde (3 Mo max)." });
+  const at = Date.now();
+  await writeJson("home_photo", { type: match[1], data: match[2], at });
+  const site = await readSite();
+  site.homePhoto = `/api/home/photo?v=${at}`;
+  res.json(await writeJson("site", site));
+});
+
+app.get("/api/home/photo", async (_req, res) => {
+  const photo = await readJson("home_photo", null);
+  if (!photo?.data) return res.status(404).end();
+  res.set("Cache-Control", "public, max-age=31536000, immutable").type(photo.type).send(Buffer.from(photo.data, "base64"));
+});
+
+// Calendrier des événements entreprises (affiché sur l'accueil)
+const cleanEvent = (e) => ({
+  id: String(e.id || uid()).slice(0, 60),
+  date: /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : "",
+  time: /^\d{2}:\d{2}$/.test(e.time) ? e.time : "",
+  title: text(e.title, 80),
+  company: text(e.company, 60),
+  place: text(e.place, 80),
+  description: text(e.description, 400),
+});
+const readEvents = async () => {
+  const raw = await readJson("events", {});
+  return (Array.isArray(raw.items) ? raw.items : []).map(cleanEvent).filter((e) => e.date && e.title).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+};
+app.get("/api/events", async (_req, res) => res.json({ items: await readEvents() }));
+
+app.post("/api/events", async (req, res) => {
+  if (!requirePerm(req, res, "site")) return;
+  const items = (Array.isArray(req.body?.items) ? req.body.items : []).slice(0, 300).map(cleanEvent);
+  const bad = items.find((e) => !e.date || !e.title);
+  if (bad) return res.status(400).json({ error: "Chaque événement doit avoir une date et un titre." });
+  await writeJson("events", { items });
+  res.json({ items: await readEvents() });
+});
+
 // Annonce : le bot la publie dans le salon des annonces
 app.post("/api/discord/annonce", async (req, res) => {
   if (!requirePerm(req, res, "site")) return;
@@ -513,6 +561,9 @@ function cleanThemes(groups) {
   }));
 }
 
+// Thèmes de couleur du site (les couleurs sont dans style.css)
+const COLOR_THEMES = [["or", "Or (d’origine)"], ["bleu", "Bleu"], ["rouge", "Rouge"], ["vert", "Vert"], ["violet", "Violet"], ["rose", "Rose"], ["cyan", "Cyan"], ["argent", "Argent"]];
+
 app.post("/api/site", async (req, res) => {
   if (!requirePerm(req, res, "site")) return;
   const site = await readSite();
@@ -538,6 +589,12 @@ app.post("/api/site", async (req, res) => {
     }));
   }
   if (req.body?.themes) site.themes = cleanThemes(req.body.themes);
+  if (req.body?.theme !== undefined) site.theme = COLOR_THEMES.some(([id]) => id === req.body.theme) ? req.body.theme : "or";
+  if (req.body?.homePhoto !== undefined) {
+    const photo = String(req.body.homePhoto || "").trim();
+    if (photo && !httpsUrl(photo) && !photo.startsWith("/api/home/photo")) return res.status(400).json({ error: "Le lien de la photo doit commencer par https://" });
+    site.homePhoto = photo.slice(0, 500);
+  }
   res.json(await writeJson("site", site));
 });
 
@@ -562,6 +619,8 @@ app.get("/api/admin", async (req, res) => {
     texts: editableTexts(site),
     tabs: TABS.map(([route, label]) => ({ route, label: site.tabs[route]?.label || label, original: label, visible: site.tabs[route]?.visible !== false })),
     categories: RULE_TREE,
+    colorThemes: COLOR_THEMES.map(([id, label]) => ({ id, label })),
+    events: await readEvents(),
     botWarning: await botStatus(),
     stats: {
       tickets: tickets.items.length,
@@ -655,7 +714,7 @@ app.post("/api/tickets/:id/close", async (req, res) => {
 
 // Whitelist
 app.get("/api/whitelist", async (req, res) => {
-  const staff = can(req, "tickets");
+  const staff = can(req, "whitelist");
   const items = (await readList("whitelist")).items.filter((i) => staff || owns(req, "whitelistKeys", i));
   res.json({ staff, botWarning: staff ? await botStatus() : "", items: items.sort(byNumberDesc).map((i) => publicWhitelist(i, { includeKey: !staff, staff })) });
 });
@@ -687,7 +746,7 @@ app.post("/api/whitelist", async (req, res) => {
 });
 
 async function staffWhitelist(req, res) {
-  if (!requirePerm(req, res, "tickets")) return null;
+  if (!requirePerm(req, res, "whitelist")) return null;
   const data = await readList("whitelist");
   const item = data.items.find((i) => i.id === req.params.id);
   if (!item) return res.status(404).json({ error: "Demande introuvable." }) && null;
@@ -709,7 +768,7 @@ app.post("/api/whitelist/:id/casier", async (req, res) => {
 });
 
 app.post("/api/whitelist/:id/status", async (req, res) => {
-  if (!requirePerm(req, res, "tickets")) return;
+  if (!requirePerm(req, res, "whitelist")) return;
   const status = ["accepted", "refused"].includes(req.body?.status) ? req.body.status : "";
   if (!status) return res.status(400).json({ error: "Choisis accepter ou refuser." });
   const found = await staffWhitelist(req, res);
@@ -733,14 +792,14 @@ app.post("/api/whitelist/:id/status", async (req, res) => {
 
 // Casiers
 app.get("/api/casiers", async (req, res) => {
-  if (!requirePerm(req, res, "tickets")) return;
+  if (!requirePerm(req, res, "casiers")) return;
   const wl = await readList("whitelist");
   const items = (await syncCasiers(wl)).items.sort(byNumberDesc);
   res.json({ items: await Promise.all(items.map((c) => casierView(c, wl))) });
 });
 
 async function staffCasier(req, res) {
-  if (!requirePerm(req, res, "tickets")) return null;
+  if (!requirePerm(req, res, "casiers")) return null;
   const data = await syncCasiers();
   const casier = data.items.find((c) => c.id === req.params.id);
   if (!casier) return res.status(404).json({ error: "Casier introuvable." }) && null;
@@ -753,7 +812,7 @@ app.get("/api/casiers/:id", async (req, res) => {
 });
 
 app.post("/api/casiers/:id/notes", async (req, res) => {
-  if (!requirePerm(req, res, "tickets")) return;
+  if (!requirePerm(req, res, "casiers")) return;
   const kind = String(req.body?.kind || "comment");
   if (!["comment", "concern", "sanction"].includes(kind)) return res.status(400).json({ error: "Choisis un commentaire, un point dérangeant ou une sanction." });
   if (text(req.body?.text, 2000).length < 3) return res.status(400).json({ error: "Écris au moins quelques mots." });
@@ -804,6 +863,9 @@ const PAGES = {
   },
 };
 
+const withTheme = (html, site) =>
+  site.theme && site.theme !== "or" ? html.replace('<html lang="fr"', `<html lang="fr" data-theme="${site.theme}"`) : html;
+
 async function render(route, page) {
   const fill = {
     title: page.file === "index" ? page.title : `${page.title} · Los Santos Reborn`,
@@ -814,9 +876,9 @@ async function render(route, page) {
     page: HTML[page.file],
     scripts: page.js.map((js) => `    <script src="/js/${js}.js"></script>\n`).join(""),
   };
-  const site = await readSite().catch(() => ({ texts: {}, discord: DISCORD_DEFAULT }));
+  const site = await readSite().catch(() => ({ texts: {}, discord: DISCORD_DEFAULT, links: {}, tabs: {} }));
   const esc = (v) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  return HTML.layout
+  return withTheme(HTML.layout, site)
     .replace(`<a href="${route}">`, `<a class="active" href="${route}">`)
     .replace(`<a href="${route}" data-staff-nav`, `<a class="active" href="${route}" data-staff-nav`)
     .replace(/\{\{(\w+)\}\}/g, (_, key) => fill[key])
@@ -829,9 +891,13 @@ async function render(route, page) {
       nav.replace(/(<a\b([^>]*)href="(\/[a-z]*)"([^>]*))>([^<]*)<\/a>/g, (all, open, _a, href, _b, label) => {
         const tab = site.tabs[href];
         if (!tab) return all;
-        const hide = tab.visible === false && !open.includes(" hidden");
-        return `${open}${hide ? " hidden" : ""}>${esc(tab.label || label)}</a>`;
+        const off = tab.visible === false;
+        return `${open}${off && !open.includes(" hidden") ? " hidden" : ""}${off ? " data-tab-off" : ""}>${esc(tab.label || label)}</a>`;
       })
+    )
+    // Photo de l'accueil choisie dans le panel
+    .replace(/<figure class="home-photo" data-home-photo hidden><\/figure>/, (all) =>
+      site.homePhoto ? `<figure class="home-photo"><img src="${esc(site.homePhoto)}" alt="" /></figure>` : all
     )
     // Boutons Discord légal / illégal : affichés seulement si le lien est rempli dans le panel
     .replace(/<a\b([^>]*)data-link="(legal|illegal)"([^>]*)>/g, (all, before, key, after) =>
@@ -842,7 +908,10 @@ async function render(route, page) {
 for (const [route, page] of Object.entries(PAGES)) {
   app.get([route, `${route === "/" ? "/index" : route}.html`], async (_req, res) => res.type("html").send(await render(route, page)));
 }
-app.get(["/admin", "/admin.html"], (_req, res) => res.type("html").send(HTML.admin));
+app.get(["/admin", "/admin.html"], async (_req, res) => {
+  const site = await readSite().catch(() => ({}));
+  res.type("html").send(withTheme(HTML.admin, site));
+});
 app.get(["/wl", "/boutique"], (req, res) => res.redirect(req.path === "/wl" ? "/whitelist" : "/"));
 
 // Erreur imprévue (ex. Supabase injoignable) : réponse propre au lieu d'un plantage

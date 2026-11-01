@@ -1,10 +1,11 @@
 (() => {
   const LOGIN_GRADES = [
-    { id: "fondateur", label: "Fondateur", hint: "Modifier le site + tickets" },
-    { id: "fondatrice", label: "Fondatrice", hint: "Modifier le site + tickets" },
-    { id: "admin", label: "Administrateur", hint: "Répondre aux tickets" },
-    { id: "modo", label: "Modérateur", hint: "Répondre aux tickets" },
-    { id: "helper", label: "Helper", hint: "Répondre aux tickets" },
+    { id: "fondateur", label: "Fondateur", hint: "Tout + panel admin" },
+    { id: "fondatrice", label: "Fondatrice", hint: "Tout + panel admin" },
+    { id: "admin", label: "Administrateur", hint: "Tout + panel admin" },
+    { id: "modo", label: "Modérateur", hint: "Tickets, WL, casiers, règlement" },
+    { id: "helper", label: "Helper", hint: "Tickets, WL, casiers, règlement" },
+    { id: "recruteur", label: "Recruteur", hint: "Demandes WL, casiers, règlement" },
   ];
 
   const escapeHtml = (value) =>
@@ -35,7 +36,7 @@
     modal.innerHTML = `
       <form class="modal-card" id="staffForm">
         <h2>Connexion staff</h2>
-        <p class="muted">Helper, modo et admin répondent aux tickets. Seul le fondateur (ou la fondatrice) peut modifier le site.</p>
+        <p class="muted">Tout le staff peut modifier le règlement. Les recruteurs gèrent les demandes WL et les casiers. Fondateurs et admins ont le panel.</p>
         <label>Grade
           <select name="grade" required>
             ${LOGIN_GRADES.map(
@@ -219,8 +220,9 @@
       document.querySelector("#staffModal").classList.add("open");
     },
     renderAuth(el) {
+      // Onglet réservé (ex. Casiers) : visible si le grade a le droit, sauf s'il est masqué dans le panel
       document.querySelectorAll("[data-staff-nav]").forEach((link) => {
-        link.hidden = !this.isStaff();
+        link.hidden = link.hasAttribute("data-tab-off") || !this.can(link.dataset.staffNav || "casiers");
       });
       if (this.can("site")) editBar();
       if (!el) return;
