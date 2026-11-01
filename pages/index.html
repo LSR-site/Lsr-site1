@@ -20,16 +20,11 @@
             <p data-edit="accueil.agenda-surtitre" class="kicker">Calendrier</p>
             <h2 data-edit="accueil.agenda-titre">Événements des entreprises</h2>
           </div>
-          <a class="btn btn-ghost" id="editAgenda" href="/admin#home" hidden>Gérer les événements</a>
+          <button class="btn btn-ghost" id="editAgenda" type="button" hidden>Gérer les événements</button>
         </div>
-        <div class="agenda">
-          <div class="agenda-nav">
-            <button class="btn btn-ghost btn-compact" type="button" id="agendaPrev" aria-label="Semaine précédente">‹</button>
-            <strong id="agendaLabel"></strong>
-            <button class="btn btn-ghost btn-compact" type="button" id="agendaNext" aria-label="Semaine suivante">›</button>
-            <button class="btn btn-ghost btn-compact" type="button" id="agendaToday" hidden>Cette semaine</button>
-          </div>
-          <div class="agenda-week" id="agendaWeek"></div>
+        <div class="agenda" id="agendaBox">
+          <div class="agenda-nav"></div>
+          <div class="agenda-week"></div>
         </div>
       </section>
 
@@ -39,18 +34,9 @@
             <p data-edit="accueil.equipe-surtitre" class="kicker">Staff</p>
             <h2 data-edit="accueil.equipe-titre">L’équipe du serveur</h2>
           </div>
-          <button class="btn btn-ghost" id="editTeam" type="button" hidden>Modifier l’équipe</button>
+          <a class="btn btn-ghost" id="editTeam" href="/admin#team" hidden>Modifier l’équipe</a>
         </div>
         <div class="org-chart" id="teamGrid"></div>
-        <form class="setup-box" id="teamEditor" hidden>
-          <div id="teamFields"></div>
-          <div class="editor-bar">
-            <button class="btn btn-ghost" id="addMember" type="button">Ajouter un membre</button>
-            <button class="btn btn-ghost" id="syncTeam" type="button" hidden>Synchroniser avec Discord</button>
-            <button class="btn btn-gold" type="submit">Enregistrer l’équipe</button>
-            <button class="btn btn-ghost" id="cancelTeam" type="button">Annuler</button>
-          </div>
-        </form>
       </section>
     </main>
 

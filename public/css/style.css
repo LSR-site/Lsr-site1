@@ -2011,14 +2011,14 @@ a.text-btn {
   font-size: 1.05rem;
 }
 
-.agenda-nav #agendaPrev,
-.agenda-nav #agendaNext {
+.agenda-nav .agenda-prev,
+.agenda-nav .agenda-next {
   min-width: 40px;
   padding: 6px 12px;
   font-size: 1.1rem;
 }
 
-.agenda-nav #agendaToday {
+.agenda-nav .agenda-today {
   margin-left: auto;
 }
 
@@ -2135,12 +2135,12 @@ a.text-btn {
     text-align: center;
   }
 
-  .agenda-nav #agendaNext {
+  .agenda-nav .agenda-next {
     grid-column: 3;
     grid-row: 1;
   }
 
-  .agenda-nav #agendaToday {
+  .agenda-nav .agenda-today {
     grid-column: 1 / -1;
     margin: 0;
   }
@@ -2155,4 +2155,210 @@ a.text-btn {
   .header-actions {
     gap: 8px;
   }
+}
+
+/* ---------- Organigramme : photos, logos, sous-catégories ---------- */
+.org-chart {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.org-row {
+  align-items: flex-start;
+}
+
+.org-photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  object-fit: cover;
+}
+
+.org-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.org-label img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* Une sous-catégorie est une branche : même trait que les cartes, puis son propre nom et ses membres */
+.org-branch > .org-level {
+  padding: 0;
+}
+
+.org-branch > .org-level > .org-label {
+  font-size: 0.68rem;
+}
+
+.org-depth-1 .org-card,
+.org-depth-2 .org-card,
+.org-depth-3 .org-card {
+  width: 180px;
+  padding: 16px 12px 14px;
+}
+
+.org-depth-2 .org-card,
+.org-depth-3 .org-card {
+  width: 160px;
+}
+
+/* ---------- Gestion des événements (accueil) ---------- */
+.modal-card.modal-wide {
+  width: min(860px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.modal-card > .btn-compact {
+  margin: 10px 0;
+}
+
+.event-rows {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.event-edit {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.event-edit-top {
+  display: grid;
+  grid-template-columns: 160px 140px 1fr auto;
+  gap: 8px;
+}
+
+.event-edit-top:last-child {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ---------- Planning des passages WL ---------- */
+.wl-planning {
+  position: relative;
+  z-index: 1;
+  margin: 18px 0 34px;
+}
+
+.wl-planning h2 {
+  font-family: "Cinzel", serif;
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+}
+
+.wl-planning .section-head .muted {
+  max-width: 640px;
+  margin-top: 6px;
+}
+
+.plan-slot {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+button.plan-slot {
+  cursor: pointer;
+}
+
+button.plan-slot:hover {
+  background: var(--gold-dim);
+}
+
+.plan-slot.full {
+  border-left-color: var(--muted);
+}
+
+.plan-slot.mine {
+  background: var(--gold-dim);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+}
+
+.plan-places {
+  font-weight: 600;
+}
+
+.plan-names {
+  color: var(--text) !important;
+}
+
+.wl-slot {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  background: var(--gold-dim);
+}
+
+.slot-pool {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  margin-bottom: 16px;
+  overflow-y: auto;
+}
+
+.slot-cand em {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: normal;
+}
+
+.modal-card .wl-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 760px) {
+  .org-branch {
+    width: 100%;
+  }
+
+  .event-edit-top,
+  .event-edit-top:last-child {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.modal-card .slot-cand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.modal-card .slot-cand input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--gold);
+}
+
+/* Organigramme plus large que l'écran : on fait défiler au lieu de couper les côtés */
+.org-chart {
+  align-items: safe center;
+}
+
+.org-row {
+  justify-content: safe center;
 }

@@ -77,6 +77,62 @@
         <div class="admin-list">${rows || `<p class="muted">Aucun ticket ouvert.</p>`}</div>`;
     },
 
+    // Qui a validé / refusé combien de WL (pseudo Discord donné à la validation)
+    wlstats() {
+      const period = SECTIONS.wlstats.period || "30";
+      const since = period === "all" ? "" : new Date(Date.now() - Number(period) * 86400000).toISOString();
+      const list = data.wlDecisions.filter((d) => !since || d.at >= since);
+      const by = new Map();
+      for (const d of list) {
+        const key = d.by.trim().toLowerCase();
+        const row = by.get(key) || { name: d.by, accepted: 0, refused: 0, last: d.at };
+        row[d.status] += 1;
+        if (d.at > row.last) row.last = d.at;
+        by.set(key, row);
+      }
+      const rows = [...by.values()].sort((a, b) => b.accepted + b.refused - (a.accepted + a.refused));
+      const max = Math.max(1, ...rows.map((r) => r.accepted + r.refused));
+      const date = (v) => new Date(v).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      const chip = (id, label) => `<button class="admin-pill toggle ${period === id ? "green" : "off"}" type="button" data-period="${id}">${label}</button>`;
+      return `${head("Validations WL", "Qui a validé ou refusé combien de WL. Le staff met son pseudo Discord à chaque décision.")}
+        <div class="admin-quick">${chip("7", "7 derniers jours")}${chip("30", "30 derniers jours")}${chip("all", "Depuis le début")}</div>
+        <div class="admin-stats">
+          <article class="admin-stat"><strong>${list.length}</strong><span>WL traitées</span></article>
+          <article class="admin-stat"><strong>${list.filter((d) => d.status === "accepted").length}</strong><span>acceptées</span></article>
+          <article class="admin-stat"><strong>${list.filter((d) => d.status === "refused").length}</strong><span>refusées</span></article>
+          <article class="admin-stat"><strong>${rows.length}</strong><span>staff actifs</span></article>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Staff (pseudo Discord)</th><th>Acceptées</th><th>Refusées</th><th>Total</th><th></th><th>Dernière</th></tr></thead>
+            <tbody>${
+              rows
+                .map(
+                  (r) => `<tr>
+                    <td><strong>${escapeHtml(r.name)}</strong></td>
+                    <td class="ok">${r.accepted}</td>
+                    <td class="ko">${r.refused}</td>
+                    <td><strong>${r.accepted + r.refused}</strong></td>
+                    <td class="bar-cell"><span class="admin-bar"><i style="width:${((r.accepted + r.refused) / max) * 100}%"></i></span></td>
+                    <td>${date(r.last)}</td>
+                  </tr>`
+                )
+                .join("") || `<tr><td colspan="6" class="muted">Aucune WL traitée sur cette période.</td></tr>`
+            }</tbody>
+          </table>
+        </div>
+        <h2 class="admin-subtitle">Dernières décisions</h2>
+        <div class="admin-list">${
+          list
+            .slice(0, 15)
+            .map(
+              (d) => `<article class="admin-row"><div><strong>#${d.number} · ${escapeHtml(d.name)}</strong><span>${date(d.at)} · par ${escapeHtml(d.by)}</span></div>
+                <span class="admin-pill ${d.status === "accepted" ? "green" : "warn"}">${d.status === "accepted" ? "Acceptée" : "Refusée"}</span></article>`
+            )
+            .join("") || `<p class="muted">Rien pour l’instant.</p>`
+        }</div>`;
+    },
+
     tabs() {
       const rows = data.tabs
         .map(
@@ -240,40 +296,280 @@
     },
 
     team() {
-      return `${head("Équipe", "L’organigramme se modifie directement sur l’accueil.")}
-        <div class="admin-list">
-          <article class="admin-row">
-            <div><strong>${data.stats.team} membre(s) dans l’organigramme</strong><span>Niveaux, rôles, bios et synchronisation avec les rôles Discord.</span></div>
-            <div class="admin-row-actions"><a class="admin-btn" href="/#equipe">Modifier l’équipe</a></div>
-          </article>
-        </div>`;
+      return `${head("Équipe", "Organigramme de l’accueil : catégories, sous-catégories, membres, photos et logos.", `<button class="admin-add" type="button" id="saveTeam">Enregistrer</button>`)}
+        <p class="muted admin-help">Clique sur un rond pour mettre une photo (membre) ou un logo (catégorie). Choisis la catégorie d’un membre pour le placer n’importe où. Relie une catégorie à un rôle Discord pour la remplir avec « Synchroniser ».</p>
+        <div class="admin-quick team-tools">
+          <button class="admin-btn" type="button" id="addRootGroup">+ Catégorie</button>
+          <button class="admin-btn" type="button" id="syncTeam">↻ Synchroniser avec Discord</button>
+          <a class="admin-btn" href="/#equipe">Voir l’organigramme</a>
+        </div>
+        <h2 class="admin-subtitle">Organigramme · glisse les cases où tu veux</h2>
+        <p class="muted admin-help org-edit-help">Attrape une case (membre ou nom de catégorie) et lâche-la : à gauche ou à droite d’une case pour la placer à côté, au milieu d’un nom de catégorie pour la mettre dedans. Pense à enregistrer.</p>
+        <div class="admin-org"><div id="teamChart" class="org-chart org-edit"></div></div>
+        <h2 class="admin-subtitle">Détails (noms, rôles, photos, rôles Discord)</h2>
+        <div id="teamTree" class="team-tree"><p class="muted">Chargement…</p></div>
+        <input type="file" id="teamFile" accept="image/jpeg,image/png,image/webp" hidden>`;
     },
   };
 
-  // Photo réduite dans le navigateur avant l'envoi (plus léger et plus rapide)
-  const shrink = (file) =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, 1920 / img.width);
-        const canvas = Object.assign(document.createElement("canvas"), { width: Math.round(img.width * scale), height: Math.round(img.height * scale) });
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(img.src);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
-      };
-      img.onerror = () => reject(new Error("Image illisible."));
-      img.src = URL.createObjectURL(file);
-    });
+  // ---------- Éditeur de l'organigramme ----------
+  // On travaille sur une copie (team) : chaque clic la modifie puis on redessine l'arbre
+  const TEAM = { levels: [], team: [], roles: [] };
+  const newId = () => crypto.randomUUID();
+  const kids = (id) => TEAM.levels.filter((l) => (l.parent || "") === id);
+  const depthOf = (l) => (l.parent ? 1 + depthOf(TEAM.levels.find((x) => x.id === l.parent) || {}) : 0);
+  const groupOptions = (selected) => {
+    const walk = (parent, d) => kids(parent).flatMap((l) => [`<option value="${l.id}"${l.id === selected ? " selected" : ""}>${"— ".repeat(d)}${escapeHtml(l.name || "Catégorie")}</option>`, ...walk(l.id, d + 1)]);
+    return walk("", 0).join("");
+  };
+  const thumb = (src, kind, id, label) =>
+    `<button class="team-thumb${src ? "" : " no-img"}" type="button" data-pick="${kind}" data-id="${id}" title="Choisir une image" style="${src ? `background-image:url('${escapeHtml(src)}')` : ""}">${src ? "" : label}</button>`;
+
+  function memberRow(m) {
+    return `<div class="team-member" data-member="${m.id}">
+        ${thumb(m.photo, "member", m.id, initials(m.name))}
+        <input class="admin-input" data-field="name" value="${escapeHtml(m.name)}" maxlength="40" placeholder="Nom">
+        <input class="admin-input" data-field="role" value="${escapeHtml(m.role)}" maxlength="40" placeholder="Rôle (ex. Fondateur)">
+        <select class="admin-input" data-field="level" title="Catégorie">${groupOptions(m.level)}</select>
+        <div class="team-actions">
+          <button class="admin-btn" type="button" data-act="m-up" title="Monter">↑</button>
+          <button class="admin-btn" type="button" data-act="m-down" title="Descendre">↓</button>
+          ${m.photo ? `<button class="admin-btn" type="button" data-act="m-nophoto" title="Retirer la photo">Sans photo</button>` : ""}
+          <button class="admin-btn danger" type="button" data-act="m-del">Retirer</button>
+        </div>
+        <input class="admin-input team-bio" data-field="bio" value="${escapeHtml(m.bio)}" maxlength="280" placeholder="Petite bio (facultatif)">
+      </div>`;
+  }
+
+  function groupBlock(l) {
+    const roles = TEAM.roles.length
+      ? `<select class="admin-input" data-gfield="roleId"><option value="">Pas lié à un rôle Discord</option>${TEAM.roles.map((r) => `<option value="${r.id}"${r.id === l.roleId ? " selected" : ""}>Rôle Discord : ${escapeHtml(r.name)}</option>`).join("")}</select>`
+      : "";
+    const d = depthOf(l);
+    return `<section class="team-group depth-${Math.min(d, 3)}" data-group="${l.id}">
+        <div class="team-group-head">
+          ${thumb(l.logo, "group", l.id, "Logo")}
+          <input class="admin-input team-group-name" data-gfield="name" value="${escapeHtml(l.name)}" maxlength="40" placeholder="Nom de la catégorie">
+          ${roles}
+          <div class="team-actions">
+            <button class="admin-btn" type="button" data-act="g-up" title="Monter">↑</button>
+            <button class="admin-btn" type="button" data-act="g-down" title="Descendre">↓</button>
+            ${d < 3 ? `<button class="admin-btn" type="button" data-act="g-sub">+ Sous-catégorie</button>` : ""}
+            <button class="admin-btn" type="button" data-act="g-member">+ Membre</button>
+            ${l.logo ? `<button class="admin-btn" type="button" data-act="g-nologo">Sans logo</button>` : ""}
+            <button class="admin-btn danger" type="button" data-act="g-del">Supprimer</button>
+          </div>
+        </div>
+        <div class="team-members">${TEAM.team.filter((m) => m.level === l.id).map(memberRow).join("") || `<p class="muted team-empty">Aucun membre ici.</p>`}</div>
+        ${kids(l.id).map(groupBlock).join("")}
+      </section>`;
+  }
+
+  function drawTeam() {
+    $("#teamChart").innerHTML = orgChart(TEAM, true) || `<p class="muted">Ajoute une catégorie pour commencer.</p>`;
+    const lost = TEAM.team.filter((m) => !TEAM.levels.some((l) => l.id === m.level));
+    $("#teamTree").innerHTML =
+      kids("").map(groupBlock).join("") ||
+      `<p class="muted">Aucune catégorie. Commence par « + Catégorie » (ex. Direction, Responsables, Modération…).</p>`;
+    if (lost.length) $("#teamTree").insertAdjacentHTML("beforeend", `<section class="team-group"><p class="muted">Membres sans catégorie (choisis-en une) :</p>${lost.map(memberRow).join("")}</section>`);
+  }
+
+  // Échange un élément avec son voisin du même groupe
+  function swap(list, item, same, dir) {
+    const sib = list.filter((x) => same(x));
+    const j = sib.indexOf(item) + dir;
+    if (j < 0 || j >= sib.length) return;
+    const a = list.indexOf(item), b = list.indexOf(sib[j]);
+    [list[a], list[b]] = [list[b], list[a]];
+  }
+
+  const ACTIONS = {
+    "g-up": (l) => swap(TEAM.levels, l, (x) => (x.parent || "") === (l.parent || ""), -1),
+    "g-down": (l) => swap(TEAM.levels, l, (x) => (x.parent || "") === (l.parent || ""), 1),
+    "g-sub": (l) => TEAM.levels.push({ id: newId(), name: "", roleId: "", parent: l.id, logo: "" }),
+    "g-member": (l) => TEAM.team.push({ id: newId(), name: "", role: "", level: l.id, bio: "", photo: "" }),
+    "g-nologo": (l) => (l.logo = ""),
+    "g-del": (l) => {
+      if (!confirm(`Supprimer la catégorie « ${l.name || "sans nom"} » ? Ses membres et sous-catégories remontent d’un cran.`)) return;
+      const up = l.parent || kids("").find((x) => x.id !== l.id)?.id || "";
+      TEAM.levels.filter((x) => x.parent === l.id).forEach((x) => (x.parent = l.parent || ""));
+      TEAM.team.filter((m) => m.level === l.id).forEach((m) => (m.level = up));
+      TEAM.levels = TEAM.levels.filter((x) => x !== l);
+    },
+    "m-up": (m) => swap(TEAM.team, m, (x) => x.level === m.level, -1),
+    "m-down": (m) => swap(TEAM.team, m, (x) => x.level === m.level, 1),
+    "m-nophoto": (m) => (m.photo = ""),
+    "m-del": (m) => (TEAM.team = TEAM.team.filter((x) => x !== m)),
+  };
+
+  // ---------- Glisser-déposer dans l'organigramme ----------
+  const heightOf = (l) => Math.max(0, ...kids(l.id).map((c) => 1 + heightOf(c)));
+  const isInside = (l, ancestorId) => !!l && (l.id === ancestorId || isInside(TEAM.levels.find((x) => x.id === l.parent), ancestorId));
+  // Où lâcher : avant / après la case visée, ou dedans (milieu d'un nom de catégorie)
+  function dropZone(event, target) {
+    const box = target.getBoundingClientRect();
+    const x = (event.clientX - box.left) / box.width;
+    if (target.dataset.drag === "group" && x > 0.3 && x < 0.7) return "into";
+    return x < 0.5 ? "before" : "after";
+  }
+  function moveTo(list, item, ref, after) {
+    list.splice(list.indexOf(item), 1);
+    const i = ref ? list.indexOf(ref) + (after ? 1 : 0) : list.length;
+    list.splice(i, 0, item);
+  }
+  function dropItem(dragged, target, zone) {
+    const tg = target.dataset.drag === "group" ? TEAM.levels.find((x) => x.id === target.dataset.id) : TEAM.team.find((x) => x.id === target.dataset.id);
+    if (!tg || dragged.item === tg) return false;
+    if (dragged.kind === "member") {
+      const m = dragged.item;
+      if (target.dataset.drag === "member") {
+        m.level = tg.level;
+        moveTo(TEAM.team, m, tg, zone === "after");
+      } else {
+        m.level = tg.id;
+        moveTo(TEAM.team, m, null);
+      }
+      return true;
+    }
+    // Catégorie : jamais dans elle-même, et 4 niveaux au plus
+    const g = dragged.item;
+    const host = target.dataset.drag === "group" ? tg : TEAM.levels.find((x) => x.id === tg.level);
+    if (!host || isInside(host, g.id)) return false;
+    const parent = zone === "into" || target.dataset.drag === "member" ? host : TEAM.levels.find((x) => x.id === host.parent);
+    if ((parent ? depthOf(parent) + 1 : 0) + heightOf(g) > 3) return toast("Trop de niveaux : 4 au maximum.", true), false;
+    g.parent = parent?.id || "";
+    moveTo(TEAM.levels, g, zone === "into" || target.dataset.drag === "member" ? null : host, zone === "after");
+    return true;
+  }
+  function bindDrag(chart) {
+    let dragged = null;
+    let mark = null;
+    const clear = () => mark && mark.classList.remove("drop-before", "drop-after", "drop-into");
+    chart.ondragstart = (event) => {
+      const el = event.target.closest("[data-drag]");
+      if (!el) return;
+      const list = el.dataset.drag === "member" ? TEAM.team : TEAM.levels;
+      dragged = { kind: el.dataset.drag, item: list.find((x) => x.id === el.dataset.id), el };
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", el.dataset.id);
+      setTimeout(() => el.classList.add("dragging"));
+    };
+    chart.ondragover = (event) => {
+      const target = event.target.closest("[data-drag]");
+      if (!dragged || !target || target === dragged.el) return;
+      event.preventDefault();
+      clear();
+      mark = target;
+      target.classList.add(`drop-${dropZone(event, target)}`);
+    };
+    chart.ondragleave = (event) => event.target.closest("[data-drag]") === mark && !mark.contains(event.relatedTarget) && clear();
+    chart.ondrop = (event) => {
+      event.preventDefault();
+      const target = event.target.closest("[data-drag]");
+      clear();
+      if (dragged && target && dropItem(dragged, target, dropZone(event, target))) {
+        drawTeam();
+        toast("Case déplacée. Clique sur Enregistrer pour garder le changement.");
+      }
+    };
+    chart.ondragend = () => {
+      clear();
+      dragged?.el.classList.remove("dragging");
+      dragged = null;
+    };
+  }
+
+  const saveTeam = async () => {
+    const home = await api("/api/home", { method: "POST", body: JSON.stringify({ levels: TEAM.levels, team: TEAM.team }) });
+    Object.assign(TEAM, home);
+    data.stats.team = home.team.length;
+  };
 
   // ---------- Actions de chaque section ----------
   const BIND = {
+    wlstats() {
+      main.querySelectorAll("[data-period]").forEach((b) => (b.onclick = () => ((SECTIONS.wlstats.period = b.dataset.period), render())));
+    },
+    async team() {
+      const [home, roles] = await Promise.all([api("/api/home"), api("/api/discord/roles").catch(() => ({ roles: [] }))]);
+      Object.assign(TEAM, { levels: home.levels.map((l) => ({ parent: "", logo: "", ...l })), team: home.team.map((m) => ({ photo: "", ...m })), roles: roles.roles || [] });
+      drawTeam();
+      bindDrag($("#teamChart"));
+      const tree = $("#teamTree");
+      let picking = null;
+      tree.oninput = (event) => {
+        const el = event.target;
+        const m = TEAM.team.find((x) => x.id === el.closest("[data-member]")?.dataset.member);
+        const g = TEAM.levels.find((x) => x.id === el.closest("[data-group]")?.dataset.group);
+        if (el.dataset.field && m) m[el.dataset.field] = el.value;
+        else if (el.dataset.gfield && g) g[el.dataset.gfield] = el.value;
+      };
+      // Changer la catégorie d'un membre le déplace tout de suite ; renommer une catégorie met à jour les listes
+      tree.onchange = (event) => {
+        if (event.target.dataset.field === "level") drawTeam();
+        if (event.target.dataset.gfield === "name") drawTeam();
+      };
+      tree.onclick = (event) => {
+        const pick = event.target.closest("[data-pick]");
+        if (pick) {
+          picking = pick.dataset.pick === "member" ? TEAM.team.find((x) => x.id === pick.dataset.id) : TEAM.levels.find((x) => x.id === pick.dataset.id);
+          picking && (picking.__kind = pick.dataset.pick);
+          return $("#teamFile").click();
+        }
+        const btn = event.target.closest("[data-act]");
+        if (!btn) return;
+        const target = btn.dataset.act.startsWith("m-")
+          ? TEAM.team.find((x) => x.id === btn.closest("[data-member]").dataset.member)
+          : TEAM.levels.find((x) => x.id === btn.closest("[data-group]").dataset.group);
+        if (target) ACTIONS[btn.dataset.act](target);
+        drawTeam();
+      };
+      $("#teamFile").onchange = async (event) => {
+        const file = event.target.files[0];
+        event.target.value = "";
+        if (!file || !picking) return;
+        try {
+          const img = await shrinkImage(file, 256, true);
+          picking.__kind === "member" ? (picking.photo = img) : (picking.logo = img);
+          delete picking.__kind;
+          drawTeam();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+      $("#addRootGroup").onclick = () => {
+        TEAM.levels.push({ id: newId(), name: "", roleId: "", parent: "", logo: "" });
+        drawTeam();
+        [...tree.querySelectorAll(".team-group-name")].pop()?.focus();
+      };
+      $("#saveTeam").onclick = async () => {
+        try {
+          await saveTeam();
+          drawTeam();
+          toast("Organigramme enregistré ✔");
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+      $("#syncTeam").onclick = async () => {
+        try {
+          await saveTeam();
+          Object.assign(TEAM, await api("/api/home/sync", { method: "POST", body: "{}" }));
+          drawTeam();
+          toast("Membres repris depuis les rôles Discord ✔");
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+    },
+
     home() {
       $("#photoFile").onchange = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
         try {
           toast("Envoi de la photo…");
-          data.site = await api("/api/home/photo", { method: "POST", body: JSON.stringify({ image: await shrink(file) }) });
+          data.site = await api("/api/home/photo", { method: "POST", body: JSON.stringify({ image: await shrinkImage(file) }) });
           toast("Photo de l’accueil mise à jour ✔");
           render();
         } catch (err) {
@@ -401,7 +697,7 @@
     if (!SECTIONS[section]) section = "dashboard";
     document.querySelectorAll("#adminNav button").forEach((b) => b.classList.toggle("active", b.dataset.section === section));
     main.innerHTML = SECTIONS[section]();
-    BIND[section]?.();
+    Promise.resolve(BIND[section]?.()).catch((err) => toast(err.message, true));
   }
 
   async function reload() {

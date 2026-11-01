@@ -18,6 +18,7 @@
   let staff = false;
   let items = [];
   let filter = "pending";
+  let plan = { items: [], pool: [] };
 
   function savedKeys() {
     try {
@@ -56,7 +57,8 @@
         latest.staffNote
           ? `<p class="wl-note">${escapeHtml(latest.staffNote)}</p>`
           : `<p class="muted">${escapeHtml(PLAYER_MSG[latest.status] || "")}</p>`
-      }`;
+      }
+      ${mySlot() ? `<p class="wl-slot">🎙️ Ton passage WL : <b>${escapeHtml(slotWhen(mySlot()))}</b>${mySlot().staff ? ` avec ${escapeHtml(mySlot().staff)}` : ""}</p>` : ""}`;
   }
 
   function renderStaffList() {
@@ -83,6 +85,96 @@
     renderMine();
     renderStaffList();
   }
+
+  // ----- Planning des passages WL -----
+  const mySlot = () => (staff ? null : plan.items.find((s) => s.mine && s.date >= new Date().toISOString().slice(0, 10)));
+  const slotWhen = (s) =>
+    `${new Date(`${s.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${s.start}${s.end ? `–${s.end}` : ""}`;
+
+  function slotCard(s) {
+    const full = s.taken >= s.places;
+    return `<${staff ? `button type="button" data-slot="${escapeHtml(s.id)}"` : "article"} class="agenda-item plan-slot${s.mine ? " mine" : ""}${full ? " full" : ""}">
+        <time>${escapeHtml(s.start)}${s.end ? ` – ${escapeHtml(s.end)}` : ""}</time>
+        ${s.mine ? `<strong>Ton passage</strong>` : ""}
+        ${s.staff ? `<span>Avec ${escapeHtml(s.staff)}</span>` : ""}
+        <span class="plan-places">${full ? "Complet" : `${s.places - s.taken} place(s) libre(s)`} · ${s.taken}/${s.places}</span>
+        ${staff && s.candidates.length ? `<span class="plan-names">${s.candidates.map((c) => escapeHtml(c.name)).join(", ")}</span>` : ""}
+        ${s.note ? `<p class="muted">${escapeHtml(s.note)}</p>` : ""}
+      </${staff ? "button" : "article"}>`;
+  }
+  const planCal = weekCalendar($("#planBox"), (date) => plan.items.filter((s) => s.date === date).map(slotCard).join(""));
+
+  async function loadPlan() {
+    const first = !plan.loaded;
+    plan = { ...(await api("/api/wl-planning")), loaded: true };
+    $("#planAdd").hidden = !plan.staff;
+    // Le joueur arrive directement sur la semaine de son passage
+    first && mySlot() ? planCal.goTo(mySlot().date) : planCal.render();
+    renderMine();
+  }
+
+  function openSlot(slot) {
+    let modal = $("#slotModal");
+    if (!modal) {
+      modal = Object.assign(document.createElement("div"), { className: "modal", id: "slotModal" });
+      document.body.append(modal);
+    }
+    const s = slot || { id: "", date: new Date().toISOString().slice(0, 10), start: "20:00", end: "22:00", staff: window.Staff.me?.username || "", places: 4, note: "", candidates: [] };
+    const chosen = new Set((s.candidates || []).map((c) => c.id));
+    const pool = [...(s.candidates || []), ...plan.pool.filter((c) => !chosen.has(c.id))];
+    const STATUS_SHORT = { pending: "demande", casier: "attente vocal", accepted: "acceptée", refused: "refusée" };
+    modal.innerHTML = `
+      <form class="modal-card" id="slotForm">
+        <h2>${slot ? "Créneau de passage WL" : "Nouveau créneau"}</h2>
+        <div class="wl-grid">
+          <label>Date <input name="date" type="date" required value="${escapeHtml(s.date)}"></label>
+          <label>Places <input name="places" type="number" min="1" max="30" value="${s.places}"></label>
+          <label>Début <input name="start" type="time" required value="${escapeHtml(s.start)}"></label>
+          <label>Fin <input name="end" type="time" value="${escapeHtml(s.end)}"></label>
+        </div>
+        <label>Staff du vocal <input name="staff" maxlength="60" value="${escapeHtml(s.staff)}" placeholder="Ex. Recruteur Max"></label>
+        <label>Note (visible par tous) <input name="note" maxlength="200" value="${escapeHtml(s.note)}" placeholder="Ex. Salon vocal « Passage WL 1 »"></label>
+        <p class="kicker">Candidats sur ce créneau</p>
+        <div class="slot-pool">${
+          pool.length
+            ? pool.map((c) => `<label class="check-line slot-cand"><input type="checkbox" value="${escapeHtml(c.id)}"${chosen.has(c.id) ? " checked" : ""}> #${c.number} · ${escapeHtml(c.name)} <em>${escapeHtml(c.discord)} · ${STATUS_SHORT[c.status] || c.status}</em></label>`).join("")
+            : `<p class="muted">Aucune demande en attente pour l’instant.</p>`
+        }</div>
+        <div class="modal-actions">
+          <button class="btn btn-gold" type="submit">Enregistrer</button>
+          ${slot ? `<button class="btn btn-ghost" type="button" id="slotDelete">Supprimer le créneau</button>` : ""}
+          <button class="btn btn-ghost" type="button" id="slotClose">Fermer</button>
+        </div>
+        <p class="muted" id="slotError"></p>
+      </form>`;
+    modal.classList.add("open");
+    $("#slotClose").onclick = () => modal.classList.remove("open");
+    if (slot) $("#slotDelete").onclick = async () => {
+      if (!confirm("Supprimer ce créneau ?")) return;
+      await api("/api/wl-planning/delete", { method: "POST", body: JSON.stringify({ id: slot.id }) });
+      modal.classList.remove("open");
+      loadPlan();
+    };
+    $("#slotForm").onsubmit = async (event) => {
+      event.preventDefault();
+      const form = Object.fromEntries(new FormData(event.target));
+      const candidates = [...modal.querySelectorAll(".slot-cand input:checked")].map((i) => i.value);
+      try {
+        const saved = await api("/api/wl-planning", { method: "POST", body: JSON.stringify({ ...form, id: s.id, candidates }) });
+        modal.classList.remove("open");
+        await loadPlan();
+        planCal.goTo(saved.slot.date);
+      } catch (err) {
+        $("#slotError").textContent = err.message;
+      }
+    };
+  }
+
+  $("#planAdd").onclick = () => openSlot(null);
+  $("#planBox").addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-slot]");
+    if (btn) openSlot(plan.items.find((s) => s.id === btn.dataset.slot));
+  });
 
   async function load() {
     const data = await api("/api/whitelist");
@@ -159,13 +251,14 @@
   });
 
   window.addEventListener("casier:changed", () => {
-    load().catch(() => {});
+    load().then(loadPlan).catch(() => {});
   });
 
   async function init() {
     await window.Staff.load();
     window.Staff.renderAuth($("#authArea"));
     await load();
+    await loadPlan();
   }
 
   init().catch(() => {

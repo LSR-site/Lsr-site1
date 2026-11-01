@@ -58,7 +58,9 @@
     return `
       <div class="casier-wlbar">
         <p class="wl-status wl-status-${escapeHtml(wl.status)}">${escapeHtml(WL_STATUS[wl.status] || wl.status)}</p>
-        <p class="muted">Demande #${wl.number} · envoyée le ${escapeHtml(formatDate(wl.createdAt))}</p>
+        <p class="muted">Demande #${wl.number} · envoyée le ${escapeHtml(formatDate(wl.createdAt))}${
+          wl.decidedAt ? ` · décidée par <b>${escapeHtml(wl.decidedByDiscord || wl.decidedBy || "Staff")}</b> le ${escapeHtml(formatDate(wl.decidedAt))}` : ""
+        }</p>
       </div>
       ${block("Histoire du personnage", wl.story)}
       ${block("Expérience RP", wl.experience)}
@@ -93,6 +95,21 @@
       .join("");
   }
 
+  // Pseudo Discord du staff, retenu sur cet appareil pour ne pas le retaper
+  const savedPseudo = () => {
+    try {
+      return localStorage.getItem("lsr.staffDiscord") || "";
+    } catch {
+      return "";
+    }
+  };
+  const rememberPseudo = (value) => {
+    try {
+      localStorage.setItem("lsr.staffDiscord", value.trim());
+    } catch {}
+    return value.trim();
+  };
+
   function decision(wl) {
     if (!wl || wl.status !== "casier") return "";
     return `
@@ -104,6 +121,9 @@
         </label>
         <label>Message au joueur
           <textarea id="casierPlayerNote" rows="2" maxlength="500" placeholder="Visible par le candidat uniquement.">${escapeHtml(wl.staffNote || "")}</textarea>
+        </label>
+        <label>Ton pseudo Discord (obligatoire)
+          <input id="casierStaffDiscord" maxlength="40" required placeholder="Ex. max.lsr" value="${escapeHtml(savedPseudo())}">
         </label>
         <div class="wl-actions">
           <button class="btn btn-gold" type="button" data-wl-status="accepted">Accepter après vocal</button>
@@ -199,6 +219,7 @@
               status: btn.dataset.wlStatus,
               vocalNote: document.querySelector("#casierVocalNote")?.value || "",
               staffNote: document.querySelector("#casierPlayerNote")?.value || "",
+              staffDiscord: rememberPseudo(document.querySelector("#casierStaffDiscord")?.value || ""),
             }),
           });
           render(data.casier);

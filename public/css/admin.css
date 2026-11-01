@@ -523,6 +523,206 @@
   background: var(--gold-deep);
 }
 
+/* Organigramme : éditeur en arbre */
+.team-tools {
+  margin: 0 0 18px;
+}
+
+.team-tree {
+  display: grid;
+  gap: 14px;
+}
+
+.team-group {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #2a231d;
+  border-left: 3px solid var(--gold);
+  border-radius: 14px;
+  background: #1a1714;
+}
+
+.team-group .team-group {
+  margin-left: 18px;
+  background: #15120f;
+}
+
+.team-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-group-name {
+  flex: 1 1 220px;
+  font-weight: 700;
+}
+
+.team-group-head select {
+  flex: 0 1 240px;
+}
+
+.team-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.team-members {
+  display: grid;
+  gap: 8px;
+}
+
+.team-member {
+  display: grid;
+  grid-template-columns: 46px 1fr 1fr 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.team-bio {
+  grid-column: 2 / -1;
+}
+
+.team-thumb {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: 50%;
+  background: #0f0d0b center / cover no-repeat;
+  color: var(--gold);
+  font: 700 0.7rem "Outfit", sans-serif;
+  cursor: pointer;
+}
+
+.team-thumb.no-img {
+  border-style: dashed;
+}
+
+.team-empty {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 1100px) {
+  .team-member {
+    grid-template-columns: 46px 1fr 1fr;
+  }
+
+  .team-member .team-actions {
+    grid-column: 2 / -1;
+  }
+}
+
+/* Validations WL : tableau par staff */
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #2a231d;
+  border-radius: 14px;
+  background: #1a1714;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid #2a231d;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-table .ok {
+  color: #8ee0b0;
+  font-weight: 700;
+}
+
+.admin-table .ko {
+  color: #f0a0aa;
+  font-weight: 700;
+}
+
+.admin-table .bar-cell {
+  width: 30%;
+}
+
+.admin-bar {
+  display: block;
+  height: 8px;
+  border-radius: 99px;
+  background: #0f0d0b;
+}
+
+.admin-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--gold);
+}
+
+/* Organigramme déplaçable (même rendu que l'accueil) */
+.admin-org {
+  margin-bottom: 10px;
+  padding: 20px 10px;
+  border: 1px dashed #3a3027;
+  border-radius: 16px;
+  background: #0f0d0b;
+}
+
+.org-edit [data-drag] {
+  cursor: grab;
+  transition: box-shadow 0.12s, opacity 0.12s;
+}
+
+.org-edit [data-drag].dragging {
+  opacity: 0.35;
+}
+
+.org-edit .drop-before {
+  box-shadow: -5px 0 0 var(--gold);
+}
+
+.org-edit .drop-after {
+  box-shadow: 5px 0 0 var(--gold);
+}
+
+.org-edit .drop-into {
+  box-shadow: 0 0 0 3px var(--gold);
+  background: var(--gold-dim);
+}
+
+.org-drop-hint {
+  margin-top: 10px;
+  padding: 10px 16px;
+  border: 1px dashed #3a3027;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.org-edit-help {
+  margin: 0 0 12px;
+}
+
 @media (max-width: 820px) {
   .admin-body {
     grid-template-columns: 1fr;
