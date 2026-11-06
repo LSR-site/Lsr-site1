@@ -74,18 +74,23 @@ const uid = () => crypto.randomUUID();
 const newKey = () => crypto.randomBytes(16).toString("hex");
 const httpsUrl = (url) => (/^https:\/\//i.test(String(url || "").trim()) ? String(url).trim().slice(0, 500) : "");
 const text = (value, max) => String(value || "").trim().slice(0, max);
+// Photo envoyée depuis le PC (réduite par le navigateur) ou lien https
+const imageUrl = (value, max = 400000) => {
+  const v = String(value || "").trim();
+  return /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length <= max ? v : httpsUrl(v);
+};
 const byNumberDesc = (a, b) => Number(b.number) - Number(a.number);
 
 // ---------- Config ----------
 
-// Droits : panel admin, site (textes, liens, thème, accueil), règlement, équipe, tickets, demandes WL, casiers
-const ALL_PERMS = ["panel", "site", "reglement", "team", "tickets", "whitelist", "casiers"];
+// Droits : panel admin, site (textes, liens, thème, accueil), règlement, équipe, événements, tickets, demandes WL, casiers
+const ALL_PERMS = ["panel", "site", "reglement", "team", "events", "tickets", "whitelist", "casiers"];
 const STAFF_GRADES = [
   ["fondateur", "Fondateur", "FONDATEUR", ["all"]],
   ["fondatrice", "Fondatrice", "FONDATRICE", ["all"]],
-  ["admin", "Administrateur", "ADMIN", ["panel", "site", "reglement", "team", "tickets", "whitelist", "casiers"]],
-  ["modo", "Modérateur", "MODO", ["tickets", "whitelist", "casiers", "reglement"]],
-  ["helper", "Helper", "HELPER", ["tickets", "whitelist", "casiers", "reglement"]],
+  ["admin", "Administrateur", "ADMIN", ["panel", "site", "reglement", "team", "events", "tickets", "whitelist", "casiers"]],
+  ["modo", "Modérateur", "MODO", ["tickets", "whitelist", "casiers", "reglement", "events"]],
+  ["helper", "Helper", "HELPER", ["tickets", "whitelist", "casiers", "reglement", "events"]],
   ["recruteur", "Recruteur", "RECRUTEUR", ["whitelist", "casiers", "reglement"]],
 ].map(([id, label, key, perms]) => ({ id, label, envKey: `STAFF_PASSWORD_${key}`, perms }));
 
@@ -228,21 +233,32 @@ async function readHome() {
   return { levels: Array.isArray(raw.levels) ? raw.levels : [], team: Array.isArray(raw.team) ? raw.team : [] };
 }
 
-// Organigramme libre : niveaux et rôles nommés par le fondateur
+// Organigramme libre : catégories et sous-catégories (parent), membres placés dans n'importe laquelle
 function writeHome({ levels, team }) {
-  const lv = (levels || []).slice(0, 12).map((l) => ({
+  const lv = (levels || []).slice(0, 40).map((l) => ({
     id: String(l.id || uid()).slice(0, 60),
-    name: text(l.name, 40) || "Niveau",
+    name: text(l.name, 40) || "Catégorie",
     roleId: isSnowflake(String(l.roleId || "")) ? String(l.roleId) : "",
+    parent: String(l.parent || ""),
+    logo: imageUrl(l.logo),
   }));
+  // Parent inconnu, boucle ou plus de 4 niveaux : la catégorie remonte tout en haut
+  const byId = new Map(lv.map((l) => [l.id, l]));
+  for (const l of lv) {
+    const seen = new Set([l.id]);
+    let p = l.parent;
+    while (p && byId.has(p) && !seen.has(p) && seen.size < 4) (seen.add(p), (p = byId.get(p).parent));
+    if (p) l.parent = "";
+  }
   return writeJson("home", {
     levels: lv,
-    team: (team || []).slice(0, 40).map((m) => ({
+    team: (team || []).slice(0, 80).map((m) => ({
       id: String(m.id || uid()).slice(0, 60),
       name: text(m.name, 40) || "Membre",
       role: text(m.role, 40),
-      level: lv.some((l) => l.id === m.level) ? m.level : lv[0]?.id || "",
+      level: byId.has(m.level) ? m.level : lv[0]?.id || "",
       bio: text(m.bio, 280),
+      photo: imageUrl(m.photo),
     })),
   });
 }
@@ -303,6 +319,7 @@ function publicWhitelist(item, { includeKey = false, staff = false } = {}) {
   const out = Object.fromEntries(WL_FIELDS.map((k) => [k, item[k]]));
   for (const [k, fallback] of Object.entries(WL_EXTRA)) out[k] = item[k] || fallback;
   out.casierId = staff ? item.casierId || null : undefined;
+  out.decidedByDiscord = staff ? item.decidedByDiscord || "" : undefined;
   out.key = includeKey ? item.key : undefined;
   return out;
 }
@@ -405,8 +422,8 @@ for (const method of ["get", "post"]) {
 }
 app.set("trust proxy", 1);
 const jsonSmall = express.json({ limit: "1mb" });
-const jsonPhoto = express.json({ limit: "4mb" });
-app.use((req, res, next) => (req.path === "/api/home/photo" ? jsonPhoto : jsonSmall)(req, res, next));
+const jsonPhoto = express.json({ limit: "6mb" });
+app.use((req, res, next) => (["/api/home/photo", "/api/home"].includes(req.path) ? jsonPhoto : jsonSmall)(req, res, next));
 app.use(sessions);
 
 // Staff
@@ -474,7 +491,7 @@ app.post("/api/home/sync", async (req, res) => {
       .filter((m) => m.roles.includes(level.roleId))
       .map((m) => {
         const id = `d-${m.id}`;
-        return { id, name: m.name, role: old.get(id)?.role || roles.find((r) => r.id === level.roleId)?.name || "", level: level.id, bio: old.get(id)?.bio || "" };
+        return { id, name: m.name, role: old.get(id)?.role || roles.find((r) => r.id === level.roleId)?.name || "", level: level.id, bio: old.get(id)?.bio || "", photo: old.get(id)?.photo || "" };
       })
   );
   const kept = home.team.filter((m) => !linked.some((l) => l.id === m.level));
@@ -517,7 +534,7 @@ const readEvents = async () => {
 app.get("/api/events", async (_req, res) => res.json({ items: await readEvents() }));
 
 app.post("/api/events", async (req, res) => {
-  if (!requirePerm(req, res, "site")) return;
+  if (!requirePerm(req, res, "events")) return;
   const items = (Array.isArray(req.body?.items) ? req.body.items : []).slice(0, 300).map(cleanEvent);
   const bad = items.find((e) => !e.date || !e.title);
   if (bad) return res.status(400).json({ error: "Chaque événement doit avoir une date et un titre." });
@@ -619,6 +636,11 @@ app.get("/api/admin", async (req, res) => {
     texts: editableTexts(site),
     tabs: TABS.map(([route, label]) => ({ route, label: site.tabs[route]?.label || label, original: label, visible: site.tabs[route]?.visible !== false })),
     categories: RULE_TREE,
+    // Décisions WL : qui a validé / refusé quoi (statistiques par staff dans le panel)
+    wlDecisions: wl.items
+      .filter((i) => i.decidedAt && ["accepted", "refused"].includes(i.status))
+      .map((i) => ({ by: i.decidedByDiscord || `${i.decidedBy || "Staff"} (avant le pseudo)`, status: i.status, at: i.decidedAt, name: i.name, number: i.number }))
+      .sort((a, b) => String(b.at).localeCompare(String(a.at))),
     colorThemes: COLOR_THEMES.map(([id, label]) => ({ id, label })),
     events: await readEvents(),
     botWarning: await botStatus(),
@@ -778,16 +800,77 @@ app.post("/api/whitelist/:id/status", async (req, res) => {
   if (item.status !== "casier") return res.status(400).json({ error: "Cette demande a déjà une décision." });
   const vocalNote = text(req.body?.vocalNote, 800);
   if (vocalNote.length < 8) return res.status(400).json({ error: "Indique le compte-rendu du vocal avant d’accepter ou de refuser." });
-  const by = staffName(req);
-  Object.assign(item, { vocalNote, vocalAt: now(), vocalBy: by, status, staffNote: text(req.body?.staffNote, 500), decidedAt: now(), decidedBy: by });
+  // Le staff qui valide met son pseudo Discord : sert aux statistiques du panel
+  const staffDiscord = text(req.body?.staffDiscord, 40).replace(/^@/, "");
+  if (staffDiscord.length < 2) return res.status(400).json({ error: "Mets ton pseudo Discord pour valider ou refuser la WL." });
+  const by = `${staffDiscord} (${staffName(req)})`;
+  Object.assign(item, { vocalNote, vocalAt: now(), vocalBy: by, status, staffNote: text(req.body?.staffNote, 500), decidedAt: now(), decidedBy: staffName(req), decidedByDiscord: staffDiscord });
   const casiers = await syncCasiers(data);
   const casier = linkCasier(casiers, item, by, { kind: "vocal", text: vocalNote, by });
   addNote(casier, { kind: "system", text: `WL #${item.number} ${status === "accepted" ? "acceptée" : "refusée"} après vocal.`, by });
   if (item.staffNote) addNote(casier, { kind: "comment", text: `Message joueur : ${item.staffNote}`, by });
   await Promise.all([writeJson("casiers", casiers), writeJson("whitelist", data)]);
   // Le bot donne le rôle WL (si acceptée), envoie le MP et note le résultat dans le casier
-  await queueJob({ type: "whitelist", status, discord: item.discord, number: item.number, name: item.name, staffNote: item.staffNote, casierId: casier.id });
+  await queueJob({ type: "whitelist", status, discord: item.discord, number: item.number, name: item.name, staffNote: item.staffNote, casierId: casier.id, staff: staffDiscord, vocalNote });
   res.json({ item: publicWhitelist(item, { staff: true }), casier: publicCasier(casier, item) });
+});
+
+// Planning des passages WL : créneaux de vocal, candidats placés par le staff
+const TIME = /^\d{2}:\d{2}$/;
+const wlBrief = (i) => ({ id: i.id, number: i.number, name: i.name, discord: i.discord, status: i.status });
+
+app.get("/api/wl-planning", async (req, res) => {
+  const staff = can(req, "whitelist");
+  const [plan, wl] = await Promise.all([readList("wl_planning"), readList("whitelist")]);
+  const mine = new Set(wl.items.filter((i) => owns(req, "whitelistKeys", i)).map((i) => i.id));
+  const byId = new Map(wl.items.map((i) => [i.id, i]));
+  res.json({
+    staff,
+    items: plan.items
+      .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))
+      .map((s) => {
+        const candidates = (s.candidates || []).filter((id) => byId.has(id));
+        return {
+          id: s.id, date: s.date, start: s.start, end: s.end, staff: s.staff, note: s.note, places: s.places,
+          taken: candidates.length, mine: candidates.some((id) => mine.has(id)),
+          candidates: staff ? candidates.map((id) => wlBrief(byId.get(id))) : undefined,
+        };
+      }),
+    // Candidats à placer : demandes en attente ou en attente de vocal
+    pool: staff ? wl.items.filter((i) => ["pending", "casier"].includes(i.status)).sort(byNumberDesc).map(wlBrief) : undefined,
+  });
+});
+
+app.post("/api/wl-planning", async (req, res) => {
+  if (!requirePerm(req, res, "whitelist")) return;
+  const b = req.body || {};
+  const slot = {
+    id: String(b.id || uid()).slice(0, 60),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : "",
+    start: TIME.test(b.start) ? b.start : "",
+    end: TIME.test(b.end) ? b.end : "",
+    staff: text(b.staff, 60),
+    note: text(b.note, 200),
+    places: Math.min(30, Math.max(1, Number(b.places) || 4)),
+  };
+  if (!slot.date || !slot.start) return res.status(400).json({ error: "Indique la date et l’heure du créneau." });
+  const wl = await readList("whitelist");
+  slot.candidates = [...new Set(Array.isArray(b.candidates) ? b.candidates : [])].filter((id) => wl.items.some((i) => i.id === id));
+  if (slot.candidates.length > slot.places) return res.status(400).json({ error: `Trop de candidats : ${slot.places} place(s) sur ce créneau.` });
+  await updateList("wl_planning", (data) => {
+    const i = data.items.findIndex((s) => s.id === slot.id);
+    i === -1 ? data.items.push(slot) : (data.items[i] = slot);
+    data.items = data.items.slice(-200);
+  });
+  res.json({ ok: true, slot });
+});
+
+app.post("/api/wl-planning/delete", async (req, res) => {
+  if (!requirePerm(req, res, "whitelist")) return;
+  await updateList("wl_planning", (data) => {
+    data.items = data.items.filter((s) => s.id !== String(req.body?.id || ""));
+  });
+  res.json({ ok: true });
 });
 
 // Casiers
